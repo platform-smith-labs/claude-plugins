@@ -60,6 +60,30 @@ counterpart of the agent-definition verb above); check they resolve with
 `get_workflow_definition_secret_refs_status`. There is no detach for either family — that's
 config surgery a human does knowingly.
 
+### Calling an authenticated API: `rest-call`, never `HTTP`
+
+Whenever a call needs a credential, use the **`rest-call`** node, not Conductor's `HTTP` system
+task. They look interchangeable and are not:
+
+- **`rest-call` is worker-executed**, so it carries tenant context and resolves a secret at run
+  time. `_ps.secret_headers` maps a header **name** to the **name of a secret ref** declared on the
+  definition — `{"Authorization": "openrouter_key"}`. The value is resolved inside the worker and
+  never reaches the engine. Literal, non-secret headers go in `_ps.headers`.
+- **`HTTP` is engine-executed.** It carries no `_ps`, so it *cannot* resolve a credential — and
+  whatever you put in its `inputParameters` is **persisted by the engine and visible in run views**.
+  A key placed there is exposed to anyone who can read the definition or any run of it. Use `HTTP`
+  only for calls that need no credential at all.
+
+Recipe: `add_workflow_definition_secret_ref`, reference its name in `_ps.secret_headers`, then
+confirm it resolves with `get_workflow_definition_secret_refs_status` **before** running. Note the
+two different failure shapes: `rest-call` **COMPLETES** with `output.ok=false` on a 4xx/5xx (branch
+on `ok`), but **FAILS**, sending nothing, when a referenced secret cannot be resolved — which is
+also the first thing to check when a `rest-call` node fails naming a secret.
+
+An LLM gateway (OpenRouter, or any OpenAI-compatible endpoint) is just this pattern: `rest-call` to
+the gateway's `/chat/completions` with a bearer credential in `_ps.secret_headers`. The `llm` node
+stays the ergonomic choice for a plain reasoning step with `response_schema` validation.
+
 ### The plumbing validation does NOT check
 
 `validate_workflow_definition` checks **structure only**. These fail at **run** time instead, and are
@@ -68,7 +92,8 @@ the usual reason a graph that validated cleanly still dies:
 - **Worker nodes read all inputs — including the "user" ones — from an `_ps` object** on the task.
   Put `content`, `session`, `only_with_repo` etc. *inside* `_ps`, not at the task top level.
   (Conductor SYSTEM tasks — `JSON_JQ_TRANSFORM`, `FORK_JOIN_DYNAMIC`, `JOIN`, `HTTP`, `WAIT`,
-  `INLINE`, `SET_VARIABLE` — take **no** `_ps`.)
+  `INLINE`, `SET_VARIABLE` — take **no** `_ps`. That is exactly why `HTTP` cannot carry a
+  credential; see *Calling an authenticated API* above.)
 - **Tenant context is not inherited.** Every worker node must reference it explicitly:
   `company_uuid: ${workflow.input._ps.company_uuid}` (likewise `workspace_uuid`, `user_uuid`). A task
   whose `_ps` lacks `company_uuid` fails with `_ps missing or invalid company_uuid`.

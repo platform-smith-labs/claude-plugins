@@ -7,7 +7,7 @@
       "name": "platform-smith",
       "source": "./plugins/platform-smith",
       "description": "Guidance for operating the Platform Smith control plane over MCP.",
-      "version": "1.8.0",
+      "version": "1.10.0",
       "category": "devops",
       "homepage": "https://docs.platformsmith.com/api/mcp-skill"
     }
