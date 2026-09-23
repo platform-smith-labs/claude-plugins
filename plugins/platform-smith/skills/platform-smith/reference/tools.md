@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-143 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+145 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -285,6 +285,13 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `terminate_workflow_execution` | **destructive** | `execution_id` | Stop a running workflow execution (issue 0042 finding 0006 — a stuck fork/join previously had no way to be ended short of the platform UI). |
+
+## trackers
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_tracker_attachment` | read | `attachment_id`, `provider`, `ticket_ref`, `workspace_uuid` | Fetch ONE file attached to (or pasted into) a tracker ticket, LIVE and read-only — THIS IS THE CUSTOMER'S OWN TRACKER CONTENT, downloaded through the tracker account the organisation connected. |
+| `get_tracker_ticket` | read | `provider`, `ticket_ref`, `workspace_uuid` | Read a ticket from the organisation's connected issue tracker (provider: linear, github or jira), LIVE and read-only — THIS IS THE CUSTOMER'S OWN TRACKER CONTENT, fetched through the tracker account the organisation connected. |
 
 ## work-items
 

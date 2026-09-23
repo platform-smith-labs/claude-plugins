@@ -1,7 +1,7 @@
 {
   "name": "platform-smith",
   "description": "Drive the Platform Smith control plane over MCP — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, and author agent definitions, workflows and playbooks.",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "author": { "name": "Platform Smith", "url": "https://platformsmith.com" },
   "homepage": "https://docs.platformsmith.com/api/mcp-skill",
   "keywords": ["mcp", "platform-smith", "devops", "agents"]
