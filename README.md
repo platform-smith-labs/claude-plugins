@@ -1,6 +1,6 @@
-# Platform Smith — skills for coding agents
+# PlatformSmith — skills for coding agents
 
-Guidance that helps a coding agent drive the [Platform Smith](https://platformsmith.com) control
+Guidance that helps a coding agent drive the [PlatformSmith](https://platformsmith.com) control
 plane over MCP instead of guessing at it. Install instructions, and what the skill is for:
 **https://docs.platformsmith.com/api/mcp-skill**
 

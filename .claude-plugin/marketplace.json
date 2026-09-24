@@ -1,13 +1,13 @@
 {
   "name": "platform-smith",
-  "description": "Skills for driving Platform Smith from a coding agent.",
-  "owner": { "name": "Platform Smith", "url": "https://platformsmith.com" },
+  "description": "Skills for driving PlatformSmith from a coding agent.",
+  "owner": { "name": "PlatformSmith", "url": "https://platformsmith.com" },
   "plugins": [
     {
       "name": "platform-smith",
       "source": "./plugins/platform-smith",
-      "description": "Guidance for operating the Platform Smith control plane over MCP.",
-      "version": "1.11.0",
+      "description": "Guidance for operating the PlatformSmith control plane over MCP.",
+      "version": "1.12.0",
       "category": "devops",
       "homepage": "https://docs.platformsmith.com/api/mcp-skill"
     }

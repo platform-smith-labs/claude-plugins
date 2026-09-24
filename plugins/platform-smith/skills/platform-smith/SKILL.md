@@ -1,11 +1,11 @@
 ---
 name: platform-smith
-description: Drive the Platform Smith control plane over MCP (ps-mcp) — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, read results, author agent definitions, workflows and playbooks, and diagnose failures. Use whenever the ps-mcp MCP server is connected and the task involves Platform Smith workspaces, projects, environments, runtimes, sessions, workflows, playbooks, work items or artifacts.
+description: Drive the PlatformSmith control plane over MCP (ps-mcp) — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, read results, author agent definitions, workflows and playbooks, and diagnose failures. Use whenever the ps-mcp MCP server is connected and the task involves PlatformSmith workspaces, projects, environments, runtimes, sessions, workflows, playbooks, work items or artifacts.
 ---
 
-# Platform Smith over MCP
+# PlatformSmith over MCP
 
-You are connected to **Platform Smith** through `ps-mcp`, a thin proxy in front of the platform API.
+You are connected to **PlatformSmith** through `ps-mcp`, a thin proxy in front of the platform API.
 Everything you do runs **as the user who owns the access token**, scoped to that user's company. You
 cannot see or touch another company's data — an attempt returns "not found", which is correct
 behaviour and not an error to retry.
