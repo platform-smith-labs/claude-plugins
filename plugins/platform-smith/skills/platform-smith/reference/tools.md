@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-146 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+147 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -43,6 +43,7 @@
 |---|---|---|---|
 | `get_artifact` | read | `artifact_version_uuid`, `session_uuid` | Fetch ONE artifact by its artifact_version_uuid (from list_session_artifacts). |
 | `get_scoped_artifact` | read | `artifact_version_uuid`, `scope`, `scope_id` | Fetch ONE project- or workspace-scoped artifact by its artifact_version_uuid (from list_scoped_artifacts). |
+| `get_work_item_artifact` | read | `artifact_uuid`, `work_item_uuid`, `workspace_uuid` | Read the CONTENT of an artifact attached to a work item — including one an earlier session attached. |
 | `list_scoped_artifacts` | read | `scope`, `scope_id` | List artifacts at project or workspace scope (scope=project\|workspace, scope_id=that container's UUID). |
 | `list_session_artifacts` | read | `session_uuid` | List a session's artifacts. |
 
