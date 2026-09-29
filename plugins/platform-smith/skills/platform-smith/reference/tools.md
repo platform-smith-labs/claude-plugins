@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-148 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+150 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -46,6 +46,7 @@
 | `get_work_item_artifact` | read | `artifact_uuid`, `work_item_uuid`, `workspace_uuid` | Read the CONTENT of an artifact attached to a work item — including one an earlier session attached. |
 | `list_scoped_artifacts` | read | `scope`, `scope_id` | List artifacts at project or workspace scope (scope=project\|workspace, scope_id=that container's UUID). |
 | `list_session_artifacts` | read | `session_uuid` | List a session's artifacts. |
+| `list_workspace_artifact_rollup` | read | `workspace_uuid` | List EVERY artifact under a workspace — its own, its projects' and their sessions' — in one call, with scope as a filter rather than a wall. |
 
 ## audit
 
@@ -300,6 +301,12 @@
 |---|---|---|---|
 | `get_tracker_attachment` | read | `attachment_id`, `provider`, `ticket_ref`, `workspace_uuid` | Fetch ONE file attached to (or pasted into) a tracker ticket, LIVE and read-only — THIS IS THE CUSTOMER'S OWN TRACKER CONTENT, downloaded through the tracker account the organisation connected. |
 | `get_tracker_ticket` | read | `provider`, `ticket_ref`, `workspace_uuid` | Read a ticket from the organisation's connected issue tracker (provider: linear, github or jira), LIVE and read-only — THIS IS THE CUSTOMER'S OWN TRACKER CONTENT, fetched through the tracker account the organisation connected. |
+
+## versions
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `list_artifact_versions` | read | `artifact_uuid` | List an artifact's version history, newest first, with the author and timestamp of each. |
 
 ## work-items
 
