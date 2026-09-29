@@ -43,9 +43,45 @@ model loose on a customer's repository. Two checks come first:
 | Launch, run a session, follow it, get results | `reference/running-work.md` |
 | Author agent definitions, workflows, playbooks, sandbox profiles | `reference/authoring.md` |
 | Work out why something failed | `reference/troubleshooting.md` |
+| Understand what a platform CONCEPT means | the documentation site — below |
 
 The server also carries prompts you can pull directly: `platform_smith_guide` (the full domain
 narrative), `diagnose_stuck_launch`, `credential_preflight`, and `authoring_guide`.
+
+## The documentation site — tools for state, docs for concepts
+
+This skill and the tool inventory teach you the platform's **verbs**. They do not teach its
+**vocabulary**: a tool schema tells you that `launch` takes an `environment_uuid`, and nothing tells
+you what an environment *is*, how it relates to a project, or when you want a new one rather than a
+new sandbox. Inferring that from a schema is exactly where an agent guesses.
+
+The documentation is published in an agent-readable form. **Start here:**
+
+```
+https://docs.platformsmith.com/llms.txt
+```
+
+It is a small table of contents — one line per section (concepts, environments, agent definitions,
+credentials, artifacts, builds, API and automation, getting started, …) with absolute URLs — so it is
+cheap to fetch speculatively and it links onward to only what you need. Every page also has a
+markdown twin: append `.md` to a page URL and you get the source rather than HTML you have to parse.
+There is a `llms-full.txt` with the entire corpus, but prefer `llms.txt` and follow its links —
+the full file is large and mostly irrelevant to any one question.
+
+**The division of labour, which decides where to look:**
+
+| Question | Answer from |
+|---|---|
+| What *is* an environment / agent definition / sandbox profile? | **the docs** |
+| Which environments does this workspace have, right now? | **a tool** (`list_environments`) |
+| What does `on_failure` mean, and what are my options? | **the docs** |
+| What is this profile's `on_failure` set to? | **a tool** (`get_sandbox_profile`) |
+| Why would I use a playbook instead of a workflow? | **the docs** |
+| Did this playbook run succeed? | **a tool** (`get_playbook_run`) |
+
+Tools are the only truth about **state** — the docs describe how the product works in general and can
+lag a deployment. So never answer a question about *this tenant* from the docs, and never guess a
+*concept* from a tool schema when one fetch would tell you.
 
 ## Rules that are not negotiable
 
