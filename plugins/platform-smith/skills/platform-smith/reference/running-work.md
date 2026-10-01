@@ -151,7 +151,21 @@ item to act against unless one was wired in: `session-prompt` accepts an optiona
 `work_item_uuid` input (mirroring `launch-playbook`'s field of the same name) — wire it from an
 upstream `work-item-create`/`work-item-create-child` node, or the spawned session's
 `ps_work_item_attach_artifact` (and siblings) will refuse with "this session is not attributed to
-a work item," with no way to supply the item id as an argument to work around it.
+a work item," and no in-pod tool takes the item id as an argument to work around it.
+
+**If a session is already running unattributed, fix it from outside with
+`attribute_session_to_work_item`** — the control-plane tool that records an existing session as an
+attempt on an item. That is the supported repair for the common case where the work turned out to
+matter only after it started, and it is idempotent for the same item. It is a *control-plane* call
+(you name the session), so it is not available to the pod itself: the in-pod tools still read
+attribution rather than setting it, which is what keeps a pod unable to reassign its own work.
+
+**Finding a legal state before you set one.** `set_work_item_state` validates against the
+lifecycle that governs the item's type, and an illegal move answers 409 without telling you which
+moves were legal. Read `list_workspace_item_types` for the types a workspace allows (and each
+one's lifecycle), then `list_lifecycle_states` and `list_lifecycle_transitions` for where the item
+can actually go. Do the same before `create_work_item`: its `item_type_name` defaults to
+`"Parent Work"`, and a deployment whose scheme does not define that name refuses the create.
 
 **Prefer the runtime-less `save-artifact` workflow node over an in-pod `save_artifact` call** when
 the only reason for the session is to publish text (e.g. summarizing several upstream nodes'

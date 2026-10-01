@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-152 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+169 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -37,6 +37,12 @@
 | `get_agent_profile` | read | `type` | Get an agent profile by type. |
 | `list_agent_profiles` | read | — | List available agent profiles (distinct from agent definitions). |
 
+## artifact-versions
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_artifact_version` | read | `artifact_version_uuid` | Read ONE artifact version's content, by the artifact_version_uuid that list_artifact_versions returns. |
+
 ## artifacts
 
 | Tool | Effect | Required args | Purpose |
@@ -48,10 +54,18 @@
 | `list_session_artifacts` | read | `session_uuid` | List a session's artifacts. |
 | `list_workspace_artifact_rollup` | read | `workspace_uuid` | List EVERY artifact under a workspace — its own, its projects' and their sessions' — in one call, with scope as a filter rather than a wall. |
 
+## attachments
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_session_attachment` | read | `attachment_uuid`, `name` | Fetch ONE file attached to this session, by the attachment_uuid list_session_attachments returns. |
+| `list_session_attachments` | read | `name` | List the files attached to this session — what a person handed you, and what has been uploaded against the session so far. |
+
 ## audit
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
+| `get_company_audit` | read | — | The whole organization's audit trail, newest first: company-level events (which belong to no workspace, so get_workspace_audit cannot show them) PLUS every workspace's events in one timeline. |
 | `get_workspace_audit` | read | `workspace_uuid` | The workspace's audit trail — what happened here, and who did it. |
 
 ## available
@@ -59,6 +73,24 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `list_available_sandbox_profiles` | read | `scope`, `scope_id` | List the sandbox profiles a launch can choose (scope=project\|workspace, scope_id=that container's UUID). |
+
+## branch-usage
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `resolve_work_branch` | read | `branch`, `workspace_uuid` | Resolve a work-branch name back to the runtimes, conversation and playbook run carrying it — the supported way back from a branch you found on a remote. |
+
+## branches
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `list_project_branches` | read | `project_uuid` | List the remote branches of the repository this project is linked to. |
+
+## cancel
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `cancel_session_turn` | **destructive** | `name`, `turn_id` | Cancel ONE in-flight turn of a session, leaving the session alive and able to take the next prompt. |
 
 ## connections
 
@@ -110,11 +142,30 @@
 |---|---|---|---|
 | `get_project_git_link` | read | `project_uuid` | Get a project's git link — which repo and branch it is bound to (read-only). |
 
+## harness-catalog
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_harness_catalog` | read | — | List the coding-agent harnesses this deployment serves, with each one's identifier and the credential auth types it accepts. |
+
 ## integrations
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `list_workspace_integrations` | read | `workspace_uuid` | List the integration connections attached to a workspace (read-only). |
+
+## item-lifecycles
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `list_item_lifecycles` | read | — | List the work-item lifecycles this company may use — the shipped system lifecycles plus any the company defined. |
+
+## item-types
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `list_type_scheme_item_types` | read | `type_scheme_uuid` | List one type scheme's item types and its containment grammar — which type may be a child of which. |
+| `list_workspace_item_types` | read | `workspace_uuid` | List the work-item types this workspace may use, which is the authoritative source for create_work_item's item_type_name — that argument defaults to "Parent Work", and a deployment whose scheme does not define that name will refuse the… |
 
 ## launch
 
@@ -162,6 +213,7 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `get_playbook_run` | read | `playbook_run_uuid` | Get one playbook run — its status and verdict. |
+| `get_playbook_run_events` | read | `playbook_run_uuid` | Cursor-poll a playbook run's progress events: phase completions, status changes, artifacts produced (with their paths) and conductor notes, in ingest order, with the acting project resolved to its name. |
 | `list_workspace_playbook_runs` | read | `workspace_uuid` | List every playbook run in a workspace, newest-first. |
 | `start_playbook_run` | **destructive** | — | Start a playbook run. |
 
@@ -281,6 +333,12 @@
 |---|---|---|---|
 | `create_workflow_approval` | **destructive** | — | DECIDE a human approval gate — an await-signal(shape=approval) node that has parked and surfaced in the workflow inbox. |
 
+## states
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `list_lifecycle_states` | read | `item_lifecycle_uuid` | List one lifecycle's states, with each state's category and its initial/terminal flags. |
+
 ## task-completions
 
 | Tool | Effect | Required args | Purpose |
@@ -315,11 +373,35 @@
 | `get_tracker_attachment` | read | `attachment_id`, `provider`, `ticket_ref`, `workspace_uuid` | Fetch ONE file attached to (or pasted into) a tracker ticket, LIVE and read-only — THIS IS THE CUSTOMER'S OWN TRACKER CONTENT, downloaded through the tracker account the organisation connected. |
 | `get_tracker_ticket` | read | `provider`, `ticket_ref`, `workspace_uuid` | Read a ticket from the organisation's connected issue tracker (provider: linear, github or jira), LIVE and read-only — THIS IS THE CUSTOMER'S OWN TRACKER CONTENT, fetched through the tracker account the organisation connected. |
 
+## transitions
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `list_lifecycle_transitions` | read | `item_lifecycle_uuid` | List one lifecycle's legal moves between states. |
+
+## type-schemes
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `list_type_schemes` | read | — | List the work-item type schemes this company may use — the shipped system schemes plus any the company defined. |
+
+## validation
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_type_scheme_validation` | read | `type_scheme_uuid` | Report whether a type scheme is usable, and every defect blocking it. |
+
 ## versions
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `list_artifact_versions` | read | `artifact_uuid` | List an artifact's version history, newest first, with the author and timestamp of each. |
+
+## work-item
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `attribute_session_to_work_item` | write | `name` | Record this session as an attempt on a work item — the link that makes the session show up in the item's history and lets the item's rollup count it. |
 
 ## work-items
 
