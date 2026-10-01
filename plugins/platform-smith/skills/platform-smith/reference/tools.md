@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-150 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+152 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -136,6 +136,13 @@
 |---|---|---|---|
 | `list_workspace_members` | read | `workspace_uuid` | List the members of a workspace — the actors you can assign work to. |
 
+## notifications
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_notification` | read | `notification_uuid` | Get one notification by UUID: its question, options, state, and — once settled — who answered, how, and whether the answer reached the agent (delivery). |
+| `list_notifications` | read | `workspace_uuid` | List a workspace's notifications — what agents, playbook runs and workflow runs are asking or telling people: questions, approval gates (response_spec=approval), escalations, updates. |
+
 ## permissions
 
 | Tool | Effect | Required args | Purpose |
@@ -262,6 +269,12 @@
 | `send_session_input` | write | `name` | Send input to a running session (e.g. |
 | `stop_session` | **destructive** | `name` | Stop a session's coding agent. |
 
+## settle
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `answer_notification` | **destructive** | `notification_uuid` | Answer, dismiss or decline a notification AS THE CALLER. |
+
 ## signal-decisions
 
 | Tool | Effect | Required args | Purpose |
@@ -347,12 +360,6 @@
 | `list_workflow_executions` | read | — | List workflow executions (runs). |
 | `run_workflow` | **destructive** | — | Start a workflow run (create a workflow execution). |
 | `run_workflow_in_workspace` | **destructive** | `workspace_uuid` | Start a workflow run attributed to a specific workspace. |
-
-## workflow-inbox
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `get_workflow_inbox` | read | `scope`, `scope_id` | List the workflow inbox (pending items awaiting action) at the given scope (scope=workspace\|project, scope_id=that container's UUID). |
 
 ## workflow-task-catalog
 

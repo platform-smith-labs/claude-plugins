@@ -44,8 +44,10 @@ scope is already fixed) for anything above project scope.
    persisted. Use **`run_workflow_in_workspace`** when the definition is company-scoped: it owns
    no workspace and must be told which one to run in.
 5. Human gates: an `await-signal` node with `_ps.shape:"approval"` parks and surfaces in
-   `get_workflow_inbox`; decide it with `create_workflow_approval` using `approved` / `rejected`
-   — **past tense, exactly those two values**.
+   `list_notifications` (as a row with `response_spec: "approval"`); decide it with
+   `create_workflow_approval` using `approved` / `rejected` — **past tense, exactly those two
+   values** — or answer that row with `answer_notification` (`choice: "approved"|"rejected"`);
+   both reach the same first-wins decision.
 6. A run that will never finish (a stalled turn with no deadline reached, a fork branch that
    quota-refused with nothing downstream to notice) can be stopped with
    **`terminate_workflow_execution(execution_id, reason)`**. A live run stops. A run that has
@@ -173,6 +175,6 @@ procedure, the **workflow** orchestrates around it (fan-out, approvals, notifica
 
 Several tools take `scope` (`project` | `workspace` | `company`) plus `scope_id`. For
 **`scope=company`, OMIT `scope_id`** — the company comes from your identity, and the path is
-`/company/…`, not a UUID route. Scoped tools: `create_secret`, `get_workflow_inbox`, the
+`/company/…`, not a UUID route. Scoped tools: `create_secret`, the
 `list_`/`create_scoped_` definition tools, and `list_sandbox_profiles` / `create_sandbox_profile`
 (`list_available_sandbox_profiles` takes `project` or `workspace` only).
