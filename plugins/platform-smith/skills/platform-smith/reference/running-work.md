@@ -126,25 +126,27 @@ inside its own pod, used by the agent running there:
 
 | In-pod tool | Purpose |
 |---|---|
-| `save_artifact` | Persist an artifact (`name`, `content`, `kind`, `scope`, optional `content_type`). `scope` is `session`, `project` or `workspace`; `kind` is `result` for a session's own output, `recipe` being reserved for platform-written build recipes. Saving the same (`scope`, `name`) again appends a new version. |
-| `list_artifacts` | List artifacts the pod can read, at one `scope` (`session` \| `project` \| `workspace`), optionally narrowed by `kind`. Metadata only — pass an `artifact_version_uuid` to the in-pod `get_artifact` for a body. |
-| `list_artifacts` / `get_artifact` **scope rule** | `scope` names a **tier, not a target**. There is no `project_uuid` or `workspace_uuid` argument: the platform resolves the scope from the runtime the pod is in, so a session cannot read a sibling project's artifacts. |
-| `get_artifact` (in-pod) | Read one artifact's content by `artifact_version_uuid` at the same `scope` you listed it from. Over **1 MiB it is REFUSED, not truncated** — the error names the size, and you never receive a partial body you might mistake for the whole. Unknown, another tenant's, and out-of-scope all return the same not-found. |
+| `ps_artifact_save` | Persist an artifact (`name`, `content`, `kind`, `scope`, optional `content_type`). `scope` is `session`, `project` or `workspace`; `kind` is `result` for a session's own output, `recipe` being reserved for platform-written build recipes. Saving the same (`scope`, `name`) again appends a new version. |
+| `ps_artifact_list` | List artifacts the pod can read, at one `scope` (`session` \| `project` \| `workspace`), optionally narrowed by `kind`. Metadata only — pass an `artifact_version_uuid` to `ps_artifact_get` for a body. |
+| `ps_artifact_list` / `ps_artifact_get` **scope rule** | `scope` names a **tier, not a target**. There is no `project_uuid` or `workspace_uuid` argument: the platform resolves the scope from the runtime the pod is in, so a session cannot read a sibling project's artifacts. |
+| `ps_artifact_get` | Read one artifact's content by `artifact_version_uuid` at the same `scope` you listed it from. Over **1 MiB it is REFUSED, not truncated** — the error names the size, and you never receive a partial body you might mistake for the whole. Unknown, another tenant's, and out-of-scope all return the same not-found. |
 | `ps_work_item_attach_artifact` | Attach an already-saved artifact to a work item (`artifact_uuid`, `role`). |
+| `ps_work_item_get_artifact` | Read back the content of an artifact attached to a work item **in your subtree** — including one an EARLIER session attached. Returns the current version's body. Read-only. Over the in-pod size limit it is refused with the size, not truncated. |
 | `ps_work_item_query` | Read work-item state from inside the pod. |
 | `ps_work_item_create_child` | Decompose the item the session is attributed to. |
 | `ps_work_item_set_state` | Advance the item's execution state. |
 | `ps_work_item_claim_ready` | Claim a ready child from a decomposition. |
 | `ps_work_item_add_dependency` | Add an ordering edge between items. |
 | `ps_work_item_comment` | Annotate the item's activity rail. |
-| `ps_signal` | Signal a parked `await-signal` correlation (e.g. a playbook run's completion). |
-| `a2a_send` | Send an A2A message from inside the pod. |
+| `ps_workflow_signal` | Signal a parked `await-signal` correlation (e.g. a playbook run's completion). |
+| `ps_a2a_send` | Send an A2A message from inside the pod. |
 
-⚠️ **`get_artifact` is two different tools.** The one in this table runs **inside a pod** and
-reads at a session/project/workspace scope resolved from the runtime. The `get_artifact` in your
-own tool list (§ the session-artifact tools above) is a **control-plane** tool you call over
-ps-api for a session you name. Same verb, different caller, different reach — if you are calling
-it from outside a pod, you want the control-plane one.
+**In-pod names all start with `ps_`, and none of them collide with a tool in your own list.** Every
+in-pod tool follows `ps_<area>_<verb>[_<object>]`, which is what lets you tell the two registries
+apart by name alone. So when you want to read an artifact, the name tells you which side you are on:
+from **outside** a pod it is this server's `get_artifact` (§ the session-artifact tools above), which
+takes a `session_uuid` you name; the pod's own read is `ps_artifact_get`, which takes no session and
+resolves its scope from the runtime it is running in.
 
 **Every `ps_work_item_*` tool needs session attribution to work at all.** A session has no work
 item to act against unless one was wired in: `session-prompt` accepts an optional
@@ -167,8 +169,8 @@ one's lifecycle), then `list_lifecycle_states` and `list_lifecycle_transitions` 
 can actually go. Do the same before `create_work_item`: its `item_type_name` defaults to
 `"Parent Work"`, and a deployment whose scheme does not define that name refuses the create.
 
-**Prefer the runtime-less `save-artifact` workflow node over an in-pod `save_artifact` call** when
+**Prefer the runtime-less `save-artifact` workflow node over an in-pod `ps_artifact_save` call** when
 the only reason for the session is to publish text (e.g. summarizing several upstream nodes'
 output) — it needs no coding-agent session at all, and in a fan-out the node that produces the
 deliverable runs last, on whatever harness quota the parallel branches left behind. A session that
-exists only to call `save_artifact` is exactly the one most exposed to that risk.
+exists only to call `ps_artifact_save` is exactly the one most exposed to that risk.
