@@ -50,8 +50,11 @@ launch reads `setting_up` while the script runs. See `authoring.md` for writing 
 **Workspace session — one agent, several repos.** When a change spans repos (a contract change in a
 producer and its consumers), launch with `scope: "workspace"`, `kind: "sandbox"` and `workspace_uuid`
 instead of `project_uuid`. `repos: [{project_uuid}]` narrows which git projects are cloned (omit it for
-all). Each repo is cloned to `/workspace/<project-slug>` on **one shared work branch**, and the agent
-starts in `/workspace`. Only a sandbox-role environment is accepted, and only workspace-level sandbox
+all); a repo entry may set `base_branch` (the branch its work branch is created from — default: the
+repo's default branch). Each repo is cloned to `/workspace/<project-slug>` on **one shared work branch**,
+and the agent starts in `/workspace`. **The clone runs after the instance is ready**: expect roughly 5 s
+per repo, during which the session stays `pending` — keep polling `get_session`, do not resend the
+prompt. If any repo cannot be cloned, the launch fails and the session never starts. Only a sandbox-role environment is accepted, and only workspace-level sandbox
 profiles and secrets apply (no project's own secrets are merged in). The response's `project_uuid`
 is the workspace's platform-owned host project: use it to resume the session or address it over A2A.
 When the work is independent per repo, prefer one `launch` per project instead.
