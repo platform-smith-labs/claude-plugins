@@ -186,3 +186,36 @@ the only reason for the session is to publish text (e.g. summarizing several ups
 output) — it needs no coding-agent session at all, and in a fan-out the node that produces the
 deliverable runs last, on whatever harness quota the parallel branches left behind. A session that
 exists only to call `ps_artifact_save` is exactly the one most exposed to that risk.
+
+## 7. Builds — the deliverable is a pull request
+
+A build turns a project's repository into a validated container recipe: it writes
+`.platform-smith/Dockerfile.platformsmith`, builds it, checks that the image starts with the
+PlatformSmith runtime, and raises a **pull request** carrying the recipe. **Nothing is pushed to a
+container registry** — the image exists only to prove the recipe, and the pull request is what you
+hand back to a person.
+
+- `list_project_builds` — a project's runs, newest first, each with its verdict. Pass `limit` to
+  cap the page and the response's `next_before` back as `before` for older runs; no `next_before`
+  means there are none.
+- `get_build_run` — one run: the **verdict** (`state`, `summary`, and the `stage` it concerns), the
+  **stages** in order (builder → source → recipe → image → container_start → pr) with status,
+  timing, severity and error, the **image** that was built (tag, digest, size, base images), and the
+  pull-request link on the `pr` stage.
+- `cancel_build` — stops a running build; the verdict becomes `cancelled`. It answers **409** once
+  the build has a verdict, and while its pull request is being raised (the recipe is already
+  validated by then — let it finish).
+
+Reading the verdict:
+
+| `state` | Means |
+|---|---|
+| `succeeded` | The recipe built, the container started with the PlatformSmith runtime, **and** the pull request was raised. |
+| `partial` | Validated, but the pull request was not raised or failed — the summary says why. The recipe is good; the hand-off is what is missing. |
+| `failed` | A stage failed; `stage` names it and that stage's `error` says how. |
+| `cancelled` | Stopped with `cancel_build`. Start a new build to try again. |
+| `running` | Still in progress — poll `get_build_run` again. |
+
+A passed container start proves the image **starts with the PlatformSmith runtime**. It does not
+prove the application inside it works. Stage logs (the clone and build output) are the customer's
+content and are not available over MCP; read them in the web UI.
