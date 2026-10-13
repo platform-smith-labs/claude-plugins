@@ -138,7 +138,7 @@ inside its own pod, used by the agent running there:
 
 | In-pod tool | Purpose |
 |---|---|
-| `ps_artifact_save` | Persist an artifact (`name`, `content`, `kind`, `scope`, optional `content_type`). `scope` is `session`, `project` or `workspace`; `kind` is `result` for a session's own output, `recipe` being reserved for platform-written build recipes. Saving the same (`scope`, `name`) again appends a new version. |
+| `ps_artifact_save` | Persist an artifact (`name`, `content`, `kind`, `scope`, optional `content_type`). `scope` is `session`, `project` or `workspace`; `kind` is `result` for a session's own output, `dockerfile` being reserved for the platform-written PlatformSmith Dockerfile. Saving the same (`scope`, `name`) again appends a new version. |
 | `ps_artifact_list` | List artifacts the pod can read, at one `scope` (`session` \| `project` \| `workspace`), optionally narrowed by `kind`. Metadata only — pass an `artifact_version_uuid` to `ps_artifact_get` for a body. |
 | `ps_artifact_list` / `ps_artifact_get` **scope rule** | `scope` names a **tier, not a target**. There is no `project_uuid` or `workspace_uuid` argument: the platform resolves the scope from the runtime the pod is in, so a session cannot read a sibling project's artifacts. |
 | `ps_artifact_get` | Read one artifact's content by `artifact_version_uuid` at the same `scope` you listed it from. Over **1 MiB it is REFUSED, not truncated** — the error names the size, and you never receive a partial body you might mistake for the whole. Unknown, another tenant's, and out-of-scope all return the same not-found. |
@@ -187,34 +187,34 @@ output) — it needs no coding-agent session at all, and in a fan-out the node t
 deliverable runs last, on whatever harness quota the parallel branches left behind. A session that
 exists only to call `ps_artifact_save` is exactly the one most exposed to that risk.
 
-## 7. Builds — the deliverable is a pull request
+## 7. Dockerfile generations — the deliverable is a pull request
 
-A build turns a project's repository into a validated container recipe: it writes
+A Dockerfile generation turns a project's repository into a validated PlatformSmith Dockerfile: it writes
 `.platform-smith/Dockerfile.platformsmith`, builds it, checks that the image starts with the
-PlatformSmith runtime, and raises a **pull request** carrying the recipe. **Nothing is pushed to a
-container registry** — the image exists only to prove the recipe, and the pull request is what you
-hand back to a person.
+PlatformSmith runtime, and raises a **pull request** carrying the Dockerfile. **Nothing is pushed to
+a container registry** — the image exists only to prove the Dockerfile, and the pull request is what
+you hand back to a person. Building, pushing and deploying the real image is the customer's own CI.
 
-- `list_project_builds` — a project's runs, newest first, each with its verdict. Pass `limit` to
-  cap the page and the response's `next_before` back as `before` for older runs; no `next_before`
+- `list_dockerfile_generations` — a project's generations, newest first, each with its verdict. Pass `limit` to
+  cap the page and the response's `next_before` back as `before` for older generations; no `next_before`
   means there are none.
-- `get_build_run` — one run: the **verdict** (`state`, `summary`, and the `stage` it concerns), the
-  **stages** in order (builder → source → recipe → image → container_start → pr) with status,
+- `get_dockerfile_generation` — one generation: the **verdict** (`state`, `summary`, and the `stage` it concerns),
+  the **stages** in order (builder → source → dockerfile → image → container_start → pr) with status,
   timing, severity and error, the **image** that was built (tag, digest, size, base images), and the
   pull-request link on the `pr` stage.
-- `cancel_build` — stops a running build; the verdict becomes `cancelled`. It answers **409** once
-  the build has a verdict, and while its pull request is being raised (the recipe is already
-  validated by then — let it finish).
+- `cancel_dockerfile_generation` — stops a running Dockerfile generation; the verdict becomes `cancelled`. It
+  answers **409** once the generation has a verdict, and while its pull request is being raised (the
+  Dockerfile is already validated by then — let it finish).
 
 Reading the verdict:
 
 | `state` | Means |
 |---|---|
-| `succeeded` | The recipe built, the container started with the PlatformSmith runtime, **and** the pull request was raised. |
-| `partial` | Validated, but the pull request was not raised or failed — the summary says why. The recipe is good; the hand-off is what is missing. |
+| `succeeded` | The Dockerfile built, the container started with the PlatformSmith runtime, **and** the pull request was raised. |
+| `partial` | Validated, but the pull request was not raised or failed — the summary says why. The Dockerfile is good; the hand-off is what is missing. |
 | `failed` | A stage failed; `stage` names it and that stage's `error` says how. |
-| `cancelled` | Stopped with `cancel_build`. Start a new build to try again. |
-| `running` | Still in progress — poll `get_build_run` again. |
+| `cancelled` | Stopped with `cancel_dockerfile_generation`. Start a new generation to try again. |
+| `running` | Still in progress — poll `get_dockerfile_generation` again. |
 
 A passed container start proves the image **starts with the PlatformSmith runtime**. It does not
 prove the application inside it works. Stage logs (the clone and build output) are the customer's

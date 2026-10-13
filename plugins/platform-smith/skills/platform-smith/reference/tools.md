@@ -86,18 +86,11 @@
 |---|---|---|---|
 | `list_project_branches` | read | `project_uuid` | List the remote branches of the repository this project is linked to. |
 
-## builds
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `get_build_run` | read | `project_uuid`, `run_uuid` | Get ONE build run by its run_uuid (from list_project_builds) — the answer to "did the build validate, and where is the PR?". |
-| `list_project_builds` | read | `project_uuid` | List a project's build runs, newest first, each with its verdict (running \| succeeded \| partial \| failed \| cancelled) and a one-line summary — start here when asked whether a project's build worked. |
-
 ## cancel
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
-| `cancel_build` | **destructive** | `project_uuid`, `run_uuid` | Cancel a RUNNING build run: the build stops, its verdict becomes `cancelled` naming the stage it was in, and the updated run is returned. |
+| `cancel_dockerfile_generation` | **destructive** | `generation_uuid`, `project_uuid` | Cancel a RUNNING Dockerfile generation: it stops, its verdict becomes `cancelled` naming the stage it was in, and the updated generation is returned. |
 | `cancel_session_turn` | **destructive** | `name`, `turn_id` | Cancel ONE in-flight turn of a session, leaving the session alive and able to take the next prompt. |
 
 ## connections
@@ -136,6 +129,13 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `set_sandbox_profile_default` | write | `sandbox_profile_uuid` | Mark or unmark a sandbox profile as its scope's default. |
+
+## dockerfile-generations
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_dockerfile_generation` | read | `generation_uuid`, `project_uuid` | Get ONE Dockerfile generation by its generation_uuid (from list_dockerfile_generations) — the answer to "was the Dockerfile validated, and where is the PR?". |
+| `list_dockerfile_generations` | read | `project_uuid` | List a project's Dockerfile generations, newest first, each with its verdict (running \| succeeded \| partial \| failed \| cancelled) and a one-line summary — start here when asked whether a project's PlatformSmith Dockerfile was created a… |
 
 ## environments
 

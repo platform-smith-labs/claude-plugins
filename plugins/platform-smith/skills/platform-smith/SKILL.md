@@ -41,7 +41,7 @@ model loose on a customer's repository. Two checks come first:
 | Connect a client and authenticate | `reference/connecting.md` |
 | Find the right tool by name and see what it costs | `reference/tools.md` (generated) |
 | Launch, run a session, follow it, get results | `reference/running-work.md` |
-| Check whether a build validated and find its pull request | `reference/running-work.md` §7 |
+| Check whether a Dockerfile generation validated and find its pull request | `reference/running-work.md` §7 |
 | Author agent definitions, workflows, playbooks, sandbox profiles | `reference/authoring.md` |
 | Work out why something failed | `reference/troubleshooting.md` |
 | Understand what a platform CONCEPT means | the documentation site — below |
@@ -63,7 +63,7 @@ https://docs.platformsmith.com/llms.txt
 ```
 
 It is a small table of contents — one line per section (concepts, environments, agent definitions,
-credentials, artifacts, builds, API and automation, getting started, …) with absolute URLs — so it is
+credentials, artifacts, Dockerfile, API and automation, getting started, …) with absolute URLs — so it is
 cheap to fetch speculatively and it links onward to only what you need. Every page also has a
 markdown twin: append `.md` to a page URL and you get the source rather than HTML you have to parse.
 There is a `llms-full.txt` with the entire corpus, but prefer `llms.txt` and follow its links —
