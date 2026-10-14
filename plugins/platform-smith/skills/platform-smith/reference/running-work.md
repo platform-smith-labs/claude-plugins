@@ -59,6 +59,26 @@ profiles and secrets apply (no project's own secrets are merged in). The respons
 is the workspace's platform-owned host project: use it to resume the session or address it over A2A.
 When the work is independent per repo, prefer one `launch` per project instead.
 
+### Who a run acts as
+
+A run **you** start through these tools — `launch`, `create_session`, `run_workflow`,
+`start_playbook_run` — acts as **you**, the owner of the access token: your permissions, and the
+coding-agent credential that resolves for you.
+
+A run an **automation** starts is different, and nobody is watching it start:
+
+- It acts as the **person who caused it** — whoever typed a comment command, @mentioned the app in
+  Slack or used `/smith`, or the pull request's author — when that person's provider account is
+  linked to a PlatformSmith user allowed to start the target.
+- Otherwise it acts as the **workspace's service principal**, which needs a **shared**
+  coding-agent credential. Schedules, webhooks, Slack alerts, pushes and `run_automation_now`
+  always act as the service principal.
+
+So the credential pre-flight above answers for *you*; it does not tell you whether an
+automation's run will have a credential. `list_automation_runs` shows who each automation run
+acted as (`identity`, `acted_as`) and, when it fell back to the service principal, why
+(`identity_note`). See `automations.md`.
+
 ## 2. Follow the async part
 
 ```

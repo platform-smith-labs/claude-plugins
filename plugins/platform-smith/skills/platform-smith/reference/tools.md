@@ -4,9 +4,17 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-172 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+188 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
+
+## accounts
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_integration_account` | read | `account_uuid` | Get one integration account — a GitHub installation, Bitbucket workspace, Slack workspace, Jira or Linear site under an integration connection (read-only, never a credential). |
+| `list_integration_account_people` | read | `account_uuid` | List who is linked on an integration account — each provider identity (external_user_ref) and the PlatformSmith user it maps to, with link status (read-only). |
+| `list_integration_account_repos` | read | `account_uuid` | List the repositories a GitHub/Bitbucket integration account can see (read-only). |
 
 ## agent-definitions
 
@@ -68,6 +76,24 @@
 | `get_company_audit` | read | — | The whole organization's audit trail, newest first: company-level events (which belong to no workspace, so get_workspace_audit cannot show them) PLUS every workspace's events in one timeline. |
 | `get_workspace_audit` | read | `workspace_uuid` | The workspace's audit trail — what happened here, and who did it. |
 
+## automations
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `create_automation` | write | `workspace_uuid` | Create an automation: a SOURCE bound to a TARGET in this workspace. |
+| `delete_automation` | **destructive** | `automation_uuid`, `workspace_uuid` | Delete an automation permanently, together with its run history; a Bitbucket automation's repository hook and a tracker automation's provider webhook are removed too. |
+| `disable_automation` | write | `automation_uuid`, `workspace_uuid` | Switch an automation OFF. |
+| `enable_automation` | **destructive** | `automation_uuid`, `workspace_uuid` | Switch an automation ON. |
+| `get_automation` | read | `automation_uuid`, `workspace_uuid` | Get ONE automation by its uuid (from list_automations): name, enabled, origin, source (kind plus its config — events, filters and command_verb for a repository source, which also gets `source.repository` {full_name, provider_repo_id} f… |
+| `list_automation_deliveries` | read | `automation_uuid`, `workspace_uuid` | The automation's delivery log, newest first (latest 50) — the answer to "why didn't it fire?" and "why did it fire twice?". |
+| `list_automation_runs` | read | `automation_uuid`, `workspace_uuid` | The runs an automation started, newest first, as {runs:[…]}: each with its status (live \| succeeded \| failed \| cancelled \| superseded \| unknown), target_type and target_ref (the session name, workflow execution id or playbook run uuid… |
+| `list_automation_suggestions` | read | `workspace_uuid` | Suggested automations for this workspace, as {suggestions:[{project_uuid, project_name, repository, suggested}]} — projects whose linked repository has no automation yet, each with a suggested configuration. |
+| `list_automations` | read | `workspace_uuid` | List a workspace's automations — each a binding from a SOURCE to a TARGET — as {automations:[…]}. |
+| `preview_cron` | read | `cron` | Preview a schedule — the next fire times the platform's own scheduler would use for a 5-field cron expression such as `0 9 * * 1-5` in an IANA `timezone` such as Europe/London, with daylight-saving changes applied — as {next:[RFC3339… |
+| `resume_automation` | **destructive** | `automation_uuid`, `workspace_uuid` | Clear an automation's AUTO-PAUSE. |
+| `run_automation_now` | **destructive** | `automation_uuid`, `workspace_uuid` | Fire an automation once, now, as if its schedule had come due. |
+| `update_automation` | **destructive** | `automation_uuid`, `workspace_uuid` | Replace an automation's configuration (name, source config, target, input_defaults, prompt_template, work_item, policies, report_back). |
+
 ## available
 
 | Tool | Effect | Required args | Purpose |
@@ -93,15 +119,19 @@
 | `cancel_dockerfile_generation` | **destructive** | `generation_uuid`, `project_uuid` | Cancel a RUNNING Dockerfile generation: it stops, its verdict becomes `cancelled` naming the stage it was in, and the updated generation is returned. |
 | `cancel_session_turn` | **destructive** | `name`, `turn_id` | Cancel ONE in-flight turn of a session, leaving the session alive and able to take the next prompt. |
 
+## command-prefix
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_company_command_prefix` | read | — | Read the organisation's COMMAND PREFIX, as {prefix, effective}: the first word people type to give an automation a command in a pull-request, issue or ticket comment — `<prefix> <verb> [args]`, such as `/ps review security` (the defaul… |
+| `get_workspace_command_prefix` | read | `workspace_uuid` | Read a workspace's COMMAND PREFIX, as {prefix, effective}: `effective` is what people type in this workspace to give an automation a command (`<prefix> <verb> [args]` in a pull-request, issue or ticket comment — the verb is an automati… |
+
 ## connections
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
-| `get_integration_connection` | read | `connection_uuid` | Get one integration connection's metadata and status (read-only, never a decrypted value) — is it enabled, and what auth_type does it carry? |
-| `list_git_connection_repos` | read | `connection_uuid` | List the repositories a git connection can see (read-only). |
-| `list_git_connections` | read | — | List the company's git connections (read-only). |
-| `list_integration_connections` | read | — | List the company's integration connections — including the claude_code / codex credentials a runtime needs (read-only, never a decrypted value). |
-| `list_workspace_git_connections` | read | `workspace_uuid` | List the git connections attached to a workspace (read-only). |
+| `get_integration_connection` | read | `connection_uuid` | Get one integration connection's metadata and status (read-only, never a decrypted value) — is it enabled, what auth_type does it carry, which accounts sit under it (each with receives_events, suspended and its workspace assignment), a… |
+| `list_integration_connections` | read | — | List the company's integration connections — every provider (GitHub, Bitbucket, Slack, Jira, Linear, the claude_code / codex credentials a runtime needs, model providers), each with its accounts (receives_events, suspended, workspace a… |
 
 ## controllers
 
@@ -148,7 +178,7 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
-| `get_project_git_link` | read | `project_uuid` | Get a project's git link — which repo and branch it is bound to (read-only). |
+| `get_project_git_link` | read | `project_uuid` | Get a project's git link — which repo and branch it is bound to, and which integration account authorizes it (integration_account_uuid, account_login, provider_code), or none for a public repo (read-only). |
 
 ## harness-catalog
 
@@ -160,7 +190,7 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
-| `list_workspace_integrations` | read | `workspace_uuid` | List the integration connections attached to a workspace (read-only). |
+| `list_workspace_integrations` | read | `workspace_uuid` | List what a workspace can use: the integration connections AND the accounts assigned to it ({connections, accounts}, read-only). |
 
 ## item-lifecycles
 
@@ -253,6 +283,12 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `get_readiness` | read | — | Check whether a target is READY to launch before launching into a failure. |
+
+## register-webhook
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `register_automation_webhook` | write | `automation_uuid`, `workspace_uuid` | Retry registering a TRACKER automation's provider webhook (jira, linear, github issues) when get_automation shows webhook_registered false. |
 
 ## restore
 

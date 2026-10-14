@@ -1,6 +1,6 @@
 ---
 name: platform-smith
-description: Drive the PlatformSmith control plane over MCP (ps-mcp) — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, read results, author agent definitions, workflows and playbooks, and diagnose failures. Use whenever the ps-mcp MCP server is connected and the task involves PlatformSmith workspaces, projects, environments, runtimes, sessions, workflows, playbooks, work items or artifacts.
+description: Drive the PlatformSmith control plane over MCP (ps-mcp) — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, read results, author agent definitions, workflows and playbooks, set up automations (pull-request, tracker-comment, Slack, schedule and webhook triggers, comment commands, record-only work-item capture), and diagnose failures. Use whenever the ps-mcp MCP server is connected and the task involves PlatformSmith workspaces, projects, environments, runtimes, sessions, workflows, playbooks, automations, work items or artifacts.
 ---
 
 # PlatformSmith over MCP
@@ -43,11 +43,54 @@ model loose on a customer's repository. Two checks come first:
 | Launch, run a session, follow it, get results | `reference/running-work.md` |
 | Check whether a Dockerfile generation validated and find its pull request | `reference/running-work.md` §7 |
 | Author agent definitions, workflows, playbooks, sandbox profiles | `reference/authoring.md` |
+| Make something run on its own — on a pull request, a comment command, a ticket, a Slack alert, a schedule or a webhook | `reference/automations.md` |
+| Find out why an automation did not fire, or who a run acted as | `reference/troubleshooting.md`, `reference/automations.md` |
 | Work out why something failed | `reference/troubleshooting.md` |
 | Understand what a platform CONCEPT means | the documentation site — below |
 
 The server also carries prompts you can pull directly: `platform_smith_guide` (the full domain
 narrative), `diagnose_stuck_launch`, `credential_preflight`, and `authoring_guide`.
+
+## Automations
+
+An automation binds a **source** — `github_repo` or `bitbucket_repo` events (pull request, push,
+comment, review), comments on `jira`, `linear` or `github` issues, alerts in a `slack` channel, a
+cron `schedule` in a timezone, or a signed `webhook` — to a **target**: a coding-agent session, a
+workflow, a playbook, or `none` (**record only**: each event creates or links a work item and
+nothing runs). Once **enabled** it starts the target **unattended** every time the source fires.
+
+- **Create it switched off** (`"enabled": false`), show the person what it will do and **who it
+  acts as**, and only then `enable_automation`. `disable_automation` is the safe stop.
+- **Who a run acts as**: a person who asked — a comment command, a Slack @mention or `/smith` —
+  or a pull request's author acts as **themselves**, when their provider account is linked to a
+  PlatformSmith user allowed to start the target. Otherwise, and always for schedules, webhooks,
+  alerts, pushes and `run_automation_now`, it acts as the **workspace's service principal**.
+  `get_automation` shows this read-only as `identity`; `list_automation_runs` shows who each run
+  actually ran as and, if it fell back, why (`identity_note`).
+- **Commands**: people type `<prefix> <verb> [args]` in a comment (e.g. `/ps review security`);
+  the verb is the automation's `command_verb`, the args reach the target. Read the prefix with
+  `get_workspace_command_prefix` before telling anyone what to type.
+- **Work items**: `work_item: {"mode": "link"}` attaches each run to one work item per pull
+  request, issue, alert or schedule fire.
+- **"Review every PR"** is configuration, not code: a `github_repo` automation on
+  `pull_request.opened` and `pull_request.synchronize` targeting a review playbook or an agent
+  session. A new push supersedes the review in flight; the platform's own pushes never re-trigger it.
+- **Schedules**: check the expression with `preview_cron` (cron + IANA timezone) first;
+  `run_automation_now` fires one immediately to try it.
+- **Credentials warn, they never refuse**: a missing shared coding-agent credential is reported
+  when you save, and runs acting as the service principal then fail as `no_credential`. Save-time
+  `warnings` (`duplicate_verb`, `prefix_mismatch`) do not block the save — pass them on.
+- **@mentions and `/smith`** in Slack run on a **built-in** automation each workspace has: switch
+  it on or off, never edit or delete it.
+- **"Why didn't it fire?"** — `list_automation_deliveries`: one envelope-only row per event, with
+  the outcome and the reason it was dropped. What it started, and who it ran as, is
+  `list_automation_runs`. No deliveries at all from a repository usually means its
+  GitHub/Bitbucket **account** does not have **Receives events** on — `get_integration_account`
+  (new git accounts start with it off).
+- A webhook with a **generated** secret, and rotating a secret, are done on the Automations page in
+  the app — the secret is shown once there, and no tool returns a secret.
+
+Recipes and the full reason table: `reference/automations.md`.
 
 ## The documentation site — tools for state, docs for concepts
 
@@ -95,7 +138,9 @@ lag a deployment. So never answer a question about *this tenant* from the docs, 
   **write** a value with `create_secret` / `update_secret`. You can **never read a decrypted value
   back** — there is no tool, and asking for one differently will not produce one.
 - **Administration is not exposed, deliberately.** No PAT or workspace-token minting, no RBAC, no
-  user creation, no connector/Slack setup, no workspace/project/environment CRUD. If you need one of
+  user creation, no integration setup (connecting GitHub, Bitbucket, Slack, Jira or Linear,
+  Receives events, workspace assignment, linking people), no changing the command prefix, no
+  workspace/project/environment CRUD. If you need one of
   these, **say exactly what is blocked and ask the human to do it in the UI** — that is more useful
   than a workaround, and there is no workaround.
 - **There is no push.** Session events are a cursor-poll loop; there is no streaming and no

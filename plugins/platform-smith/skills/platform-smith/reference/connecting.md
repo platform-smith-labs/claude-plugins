@@ -2,13 +2,18 @@
 
 ps-mcp is a **remote Streamable-HTTP** MCP server, and there are now **two** ways to authenticate:
 
-| | **Personal access token** | **Connected app (OAuth)** |
+| | **Personal access token** | **Authorized app (OAuth)** |
 |---|---|---|
 | How | you paste a `pat_…` bearer | the client runs an OAuth flow and you approve it on a consent screen |
 | Good for | CLIs, CI, scripts, headless agents — anything that can set a header | hosted chat clients: Claude.ai, Claude Desktop and mobile, ChatGPT |
 | Expiry | optional, up to 365 days | access token 1 hour, refreshed automatically; the connection itself lasts up to 365 days |
-| Revoking | Account → Access tokens | Account → Connected apps |
+| Revoking | Account → Access tokens | Account → Authorized apps |
 | Availability | always | only where the deployment has enabled it |
+
+> **Two directions, two names.** An AI client reaching *into* PlatformSmith (this page) is an
+> **Authorized app**. PlatformSmith reaching *out* to GitHub, Bitbucket, Slack, Jira, Linear or a
+> model provider is an **Integration** — a different settings page, read over MCP with
+> `list_integration_connections`. Revoking one never touches the other.
 
 **Neither replaces the other.** If your client can send a header, a PAT is simpler and is still the
 right answer. OAuth exists because some clients *cannot*: ChatGPT supports OAuth only, and the
@@ -31,7 +36,7 @@ follow it:
 4. You see a consent screen naming the app, the host it will send you back to, and **which company**
    the connection acts in. You approve or cancel.
 5. You get an email saying an app was connected. **If you did not connect it, that email is your
-   signal** — disconnect it from Account → Connected apps.
+   signal** — disconnect it from Account → Authorized apps.
 
 Things worth knowing:
 

@@ -22,8 +22,9 @@ credential or pick another definition — see the pre-flight in `running-work.md
 
 1. **`list_integration_connections`** — does a `claude_code` / `codex` credential exist, and is it
    enabled? `get_integration_connection` for one in detail.
-2. **`list_workspace_integrations`** — a credential that exists company-wide but is **not attached to
-   this workspace** will not resolve for its runtimes.
+2. **`list_workspace_integrations`** — returns the `connections` and `accounts` **assigned to this
+   workspace**. A credential that exists company-wide but is not assigned here will not resolve for
+   its runtimes.
 3. **`get_agent_definition_secret_refs_status`** — do the refs actually resolve?
 4. ⚠️ **Credentials are frozen into the runtime instance at launch.** A credential fixed (or rotated
    with `update_secret`) afterwards needs a **fresh runtime** — restarting the existing one changes
@@ -32,10 +33,61 @@ credential or pick another definition — see the pre-flight in `running-work.md
 ## Working tree is empty or not what you expected
 
 1. **`get_project_git_link`** — is the project bound to a repo and branch at all? This is the single
-   most useful check here.
-2. **`list_git_connections`** — is a provider connected?
-3. **`list_git_connection_repos`** — can the connection **see** that repo? If it is missing here, the
-   installation does not cover it, and no amount of project config will fix that.
+   most useful check here. It also names the **integration account** that authorizes the clone
+   (`integration_account_uuid`, `account_login`, `provider_code`) — or none, for a public repo.
+2. **`get_integration_account`** on that account — is it `suspended`, and is it **assigned to this
+   workspace** (`assignment`)? A link whose account is suspended or not assigned here will not mint
+   a clone token.
+3. **`list_integration_account_repos`** — can the account **see** that repo? Search with `q` before
+   concluding it is absent. If it is missing, that installation does not cover it, and no amount of
+   project config will fix that. A `409 git_connection_reauth_required` means a person must renew
+   the account's authorization in the app.
+
+GitHub and Bitbucket are **integrations** now: each installation or workspace is an **account**
+under an integration connection (`list_integration_connections` lists them with their accounts).
+
+## Why didn't my automation fire?
+
+1. **`list_automation_deliveries`** for that automation — one envelope-only row per event, with
+   the outcome and the reason. Most answers are here: `disabled`, `paused`, `filtered`,
+   `unknown_command` (a verb nothing answers — check it, and the prefix with
+   `get_workspace_command_prefix`), `author_not_linked`, `built_in_off` (Slack @mentions and
+   `/smith` switched off in this workspace), `no_credential`. Tracker labels and assignments no longer
+   start anything (they only capture the ticket, with no delivery logged): use a command. The full table is in
+   `automations.md`.
+2. **`get_automation`** — is it `enabled`? Is it auto-paused (`pause`)? Does `source` say what you
+   think (events, `command_verb`, the tracker container), and is the target still there?
+3. **The event never appears in the log at all?** Then it never reached this automation:
+   - **`get_integration_account`** — is **Receives events** on (`receives_events`)? New GitHub and
+     Bitbucket accounts start with it **off**, and nothing fires from an account until a person
+     turns it on in the app. Is the account `suspended`, or not assigned to the automation's
+     workspace?
+   - For a repository source: is the project still linked to that repository
+     (`get_project_git_link`), and is the platform's App installed on it?
+   - A webhook delivery with a bad signature or an unknown address is rejected before it is logged.
+4. **A command did nothing?** The person must type the workspace's **effective** prefix
+   (`get_workspace_command_prefix`) and then the verb, at the start of the comment — the prefix is
+   case-sensitive.
+
+## Who did my automation run as?
+
+1. **`list_automation_runs`** — each run carries `identity` (`person` or `service_principal`),
+   `acted_as`, and an `identity_note` when a person asked but the run fell back to the service
+   principal:
+   - `person_not_linked` — their provider account is not linked to a PlatformSmith user.
+     **`list_integration_account_people`** shows who is linked (an org admin sees every link;
+     anyone else only their own). Linking happens in the app.
+   - `person_not_member` — linked, but not allowed to start that target in this workspace.
+   - `person_unchecked` — the permission could not be checked at that moment; usually transient.
+   - `person_target_unsupported` — that target does not act as a person for that kind of event.
+2. **`get_automation`** → `identity` says what to expect: `service_principal` (always — schedules,
+   webhooks, Slack alerts, pushes) or `invoker_when_linked` with the `invoker` (`pr_author`,
+   `commenter`, `mentioner`). `run_automation_now` always runs as the service principal.
+3. A Slack @mention or `/smith` never falls back to the service principal: if the sender could
+   not act as themselves, nothing started and the delivery log says why.
+
+A provider account can belong to only **one** organization: if a connect in the app reports the
+account is claimed elsewhere, another organization holds it, and nothing on this side changes that.
 
 ## The runtime does not behave like its definition says
 
