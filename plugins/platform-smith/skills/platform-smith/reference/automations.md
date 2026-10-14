@@ -55,6 +55,35 @@ credential, the automation is still saved and the response says so. Tell the per
 that acts as the service principal will fail, and the delivery log will show `failed` /
 `no_credential`, until a shared credential exists for the workspace.
 
+## Require approval: hold each run until someone says yes
+
+`policies.require_approval` makes an enabled automation **ask before every run** instead of starting
+it unattended:
+
+```json
+"policies": {"require_approval": {"timeout": "24h"}}
+```
+
+- Each matching event creates a run with status **`held`** and raises a **workspace notification**
+  ("Approve run of …?") naming the event, who caused it and when the hold expires — never the pull
+  request's text or the prompt.
+- **Approve** starts it, acting as the identity decided when it was held (the person who caused it,
+  or the service principal) — never as the approver, who is recorded as `approved_by`.
+  **Decline** drops it (`declined`). Nobody answering before `timeout` **expires** it (`expired`);
+  an expired run never starts.
+- Answer it with `approve_automation_run` / `decline_automation_run`, or with
+  `answer_notification` on the run's `approval_notification_uuid` using `choice: "approve"` or
+  `"decline"`. They are the **same decision**: the first answer wins and a second one gets
+  `409 already_settled`. `409 not_held` means the run is no longer waiting; `403` means the caller
+  cannot answer this workspace's notifications.
+- **Anyone who can answer the workspace's notifications may approve — including whoever (or
+  whichever agent) raised the event.** There is no separate approver list. `can_approve` on the run
+  says whether you can. Still ask the person before approving: an approved run starts unattended.
+- `timeout` is a duration from `1h` to `168h` (7 days); `null` switches approval off. Caps, the
+  minimum interval and concurrency are checked again at approval, so an approved run can still be
+  dropped (`cap_reached`, `min_interval`, `concurrency_skip`). Record-only automations never hold.
+- `run_automation_now` on such an automation answers `held: true` with the held run's `run_uuid`.
+
 ## Who a run acts as
 
 A run acts **as a person** only when a person caused it, and only if the platform can confirm
@@ -187,6 +216,8 @@ nothing unless the fork policy allows them.
 `list_automation_suggestions` lists projects whose linked repository has no automation yet,
 each with a suggested configuration. Accepting one is `create_automation` with
 `"origin": "suggested_on_connect"` and `"enabled": false` — a suggestion never switches itself on.
+Suggestions someone dismissed for the workspace are left out (`dismissed_count` says how many);
+`include_dismissed=true` lists them too. Dismissing is done on the Automations page in the app.
 
 ## Recipe: a command people type on a pull request or ticket
 
@@ -234,7 +265,13 @@ each with a suggested configuration. Accepting one is `create_automation` with
 | `jira`, `linear`, `github` | `beacon_mode`: `off` · `suggest` (default) · `auto` | the work item's status beacon on the ticket |
 | | `findings`: `off` (default) · `on` | the run's findings posted as a ticket comment |
 | `github_repo` | `checks`: `true` · `false` (default) | each run reported as a check on the pull request |
+| | `pr_comment`: `true` · `false` (default) | the summary the agent reported at the end of the run, posted as one pull-request comment |
 | `slack` | — | replies in the alert's thread on its own |
+
+`pr_comment` posts only what the agent deliberately reported as its outcome (its `verdict_summary`,
+below) — no summary, no comment, and never the transcript. It is refused (422) on any source but
+`github_repo`. With `checks` on, the check's conclusion follows the agent's verdict: `pass` →
+success, `fail` → failure, `needs_attention` → action required.
 
 On an update, a tracker's `beacon_mode`, `findings` and `inbound_mode` keep their stored values when
 left out, so a read sent back never switches them off by accident. (`writeback_mode`, the older
@@ -321,11 +358,19 @@ the PlatformSmith app**. Ask the person to do it there. No tool ever returns a s
 
 `list_automation_deliveries` shows the latest 50 deliveries for one automation, newest first.
 Each row is **envelope only** — the event name, the outcome, the reason, the time, the run it
-started and the work item it linked. It never contains the event payload or anyone's text.
+started and the work item it linked, plus `event_name` (such as `pull_request.synchronize`),
+`event_ref` (a pull request `#12` or a branch), a short `head_sha` and `sender_login`. It never
+contains the event payload or anyone's text.
+
+Events this automation does not listen for (`no_event_match`) are **hidden by default**:
+`ignored_count` says how many arrived in the last 14 days, and `show_ignored=true` lists them.
 
 | Outcome / reason | Meaning | What to do |
 |---|---|---|
-| `started` | a run began | follow it with `list_automation_runs` |
+| `started` | a run began (reason `approved` when a held run was approved) | follow it with `get_automation_run` |
+| `held` / `awaiting_approval` | `require_approval` is holding the run | approve or decline it (above); a second row records how it settled |
+| `dropped` / `approval_declined` | someone declined the held run | expected |
+| `dropped` / `approval_timed_out` | nobody answered before the hold expired | expected — lengthen `timeout` if it keeps happening |
 | `recorded` / `record_only` | a record-only automation linked its work item; nothing ran | expected |
 | `dropped` / `disabled` | the automation is off | `enable_automation`, with the person's agreement |
 | `dropped` / `built_in_off` | @mentions and `/smith` are switched off in this workspace | switch the built-in automation on, if the person wants them |
@@ -343,6 +388,7 @@ started and the work item it linked. It never contains the event payload or anyo
 | `dropped` / `cel_filter` | a webhook filter expression said no | check the filter |
 | `suppressed` / `deduplicated` | a repeat of a Slack alert already handled | expected |
 | `failed` / `no_credential` | no usable coding-agent credential for whoever the run acts as | ask an admin to add a shared one |
+| `failed` / `person_credential_not_granted` | the run acted as a person whose own coding-agent credential is not allowed for automations | that person allows it in the app |
 | `failed` / `target_gone` | the target was deleted | point the automation at a live target |
 | `failed` / `principal_unavailable` | the workspace's service principal could not be resolved | ask an admin to check the workspace |
 | `failed` / `work_item_failed` | a record-only delivery could not link its work item | check `work_item` (type name, key) |
@@ -357,10 +403,21 @@ address is rejected before it is logged.
 
 ## What it started, and who it ran as
 
-`list_automation_runs` shows what the automation started: each run's status (`live`,
-`succeeded`, `failed`, `cancelled`, `superseded`, `unknown`), its `target_ref` — open it with
-`get_session`, `get_workflow_execution` or `get_playbook_run` — and its `work_item` (open it with
+`list_automation_runs` shows what the automation started or is holding: each run's status
+(`live`, `succeeded`, `failed`, `cancelled`, `superseded`, `unknown`, and with approval `held`,
+`declined`, `expired`), its `event_name`, its `target_ref` — open it with `get_session`,
+`get_workflow_execution` or `get_playbook_run` — and its `work_item` (open it with
 `get_work_item`). `superseded` means a newer push to the same pull request replaced it.
+`get_automation_run` reads one run by `run_uuid`.
+
+A held run also carries `hold_expires_at`, `approval_notification_uuid`, `requested_by` (the person
+who caused it, or `null`) and `can_approve`; once settled, `approved_by` and `decided_at`.
+
+**The agent's verdict.** A coding agent started by an automation can report its own outcome —
+`verdict` `pass`, `fail` or `needs_attention` (or `null` when it reported none), with a
+`verdict_summary` it deliberately wrote and `verdict_at`. A `fail` verdict makes the run `failed`.
+`pr_comment_url` links the pull-request comment posted from that summary when
+`report_back.pr_comment` is on.
 
 Each run also says **who it ran as**: `identity` (`person` or `service_principal`), `acted_as`
 (the user it acted as), and — when a person asked but the run fell back to the service

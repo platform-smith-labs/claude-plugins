@@ -47,7 +47,9 @@ scope is already fixed) for anything above project scope.
    `list_notifications` (as a row with `response_spec: "approval"`); decide it with
    `create_workflow_approval` using `approved` / `rejected` — **past tense, exactly those two
    values** — or answer that row with `answer_notification` (`choice: "approved"|"rejected"`);
-   both reach the same first-wins decision.
+   both reach the same first-wins decision. (An automation's **held run** is a different approval
+   row — kind `automation` — answered with `choice: "approve"|"decline"`, or with
+   `approve_automation_run` / `decline_automation_run`; see `reference/automations.md`.)
 6. A run that will never finish (a stalled turn with no deadline reached, a fork branch that
    quota-refused with nothing downstream to notice) can be stopped with
    **`terminate_workflow_execution(execution_id, reason)`**. A live run stops. A run that has

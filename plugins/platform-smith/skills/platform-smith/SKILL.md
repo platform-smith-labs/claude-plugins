@@ -61,6 +61,14 @@ nothing runs). Once **enabled** it starts the target **unattended** every time t
 
 - **Create it switched off** (`"enabled": false`), show the person what it will do and **who it
   acts as**, and only then `enable_automation`. `disable_automation` is the safe stop.
+- **Require approval**: `policies.require_approval: {"timeout": "24h"}` holds every run (`held`)
+  behind a workspace notification until someone approves it — `approve_automation_run` /
+  `decline_automation_run`, or `answer_notification` with `choice` `approve` / `decline` (the same
+  first-wins decision). Anyone who can answer the workspace's notifications may approve, including
+  whoever raised the event. Unanswered, it expires and never starts.
+- **Run detail**: `get_automation_run` reads one run — its approval state and the agent's own
+  `verdict` (`pass` / `fail` / `needs_attention`) and summary, which `report_back.pr_comment` posts
+  on the pull request.
 - **Who a run acts as**: a person who asked — a comment command, a Slack @mention or `/smith` —
   or a pull request's author acts as **themselves**, when their provider account is linked to a
   PlatformSmith user allowed to start the target. Otherwise, and always for schedules, webhooks,

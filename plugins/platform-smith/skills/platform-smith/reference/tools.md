@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-188 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+191 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -80,14 +80,17 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
+| `approve_automation_run` | **destructive** | `automation_uuid`, `run_uuid`, `workspace_uuid` | APPROVE a HELD automation run (status held — the automation has policies.require_approval). |
 | `create_automation` | write | `workspace_uuid` | Create an automation: a SOURCE bound to a TARGET in this workspace. |
+| `decline_automation_run` | **destructive** | `automation_uuid`, `run_uuid`, `workspace_uuid` | DECLINE a HELD automation run: it never starts (status declined; the delivery log records dropped/approval_declined). |
 | `delete_automation` | **destructive** | `automation_uuid`, `workspace_uuid` | Delete an automation permanently, together with its run history; a Bitbucket automation's repository hook and a tracker automation's provider webhook are removed too. |
 | `disable_automation` | write | `automation_uuid`, `workspace_uuid` | Switch an automation OFF. |
 | `enable_automation` | **destructive** | `automation_uuid`, `workspace_uuid` | Switch an automation ON. |
 | `get_automation` | read | `automation_uuid`, `workspace_uuid` | Get ONE automation by its uuid (from list_automations): name, enabled, origin, source (kind plus its config — events, filters and command_verb for a repository source, which also gets `source.repository` {full_name, provider_repo_id} f… |
+| `get_automation_run` | read | `automation_uuid`, `run_uuid`, `workspace_uuid` | Get ONE automation run by its run_uuid (from list_automation_runs, a run_automation_now response, or a notification's link) — the same object list_automation_runs returns: status (live \| succeeded \| failed \| cancelled \| superseded \| un… |
 | `list_automation_deliveries` | read | `automation_uuid`, `workspace_uuid` | The automation's delivery log, newest first (latest 50) — the answer to "why didn't it fire?" and "why did it fire twice?". |
-| `list_automation_runs` | read | `automation_uuid`, `workspace_uuid` | The runs an automation started, newest first, as {runs:[…]}: each with its status (live \| succeeded \| failed \| cancelled \| superseded \| unknown), target_type and target_ref (the session name, workflow execution id or playbook run uuid… |
-| `list_automation_suggestions` | read | `workspace_uuid` | Suggested automations for this workspace, as {suggestions:[{project_uuid, project_name, repository, suggested}]} — projects whose linked repository has no automation yet, each with a suggested configuration. |
+| `list_automation_runs` | read | `automation_uuid`, `workspace_uuid` | The runs an automation started or is holding, newest first, as {runs:[…]}: each with its run_uuid and status (live \| succeeded \| failed \| cancelled \| superseded \| unknown \| held \| declined \| expired), event_name, target_type and target… |
+| `list_automation_suggestions` | read | `workspace_uuid` | Suggested automations for this workspace, as {suggestions:[{suggestion_key, project_uuid, project_name, repository, suggested}], dismissed_count} — projects whose linked repository has no automation yet, each with a suggested configura… |
 | `list_automations` | read | `workspace_uuid` | List a workspace's automations — each a binding from a SOURCE to a TARGET — as {automations:[…]}. |
 | `preview_cron` | read | `cron` | Preview a schedule — the next fire times the platform's own scheduler would use for a 5-field cron expression such as `0 9 * * 1-5` in an IANA `timezone` such as Europe/London, with daylight-saving changes applied — as {next:[RFC3339… |
 | `resume_automation` | **destructive** | `automation_uuid`, `workspace_uuid` | Clear an automation's AUTO-PAUSE. |
