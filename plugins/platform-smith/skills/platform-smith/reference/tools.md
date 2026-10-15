@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-248 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+255 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -165,13 +165,20 @@
 | `apply_connector_update` | write | `connector` | ADMIN ACTION (organisation admins): bring this organisation's copy of a connector up to the newer catalog version (list_connectors shows update_available). |
 | `assign_connector_account` | **destructive** | `account_uuid` | ADMIN ACTION (organisation admins): REPLACE which workspaces an existing connector account serves (account_uuid from list_connector_accounts), as assignments [{workspace_uuid (null = every workspace), label, is_default}]. |
 | `clear_environment_connector_override` | **destructive** | `connector`, `environment_uuid` | ADMIN ACTION: remove an environment's account override for a connector; sessions there fall back to the workspace's default account, or the only account assigned to it. |
+| `create_custom_connector` | write | — | ADMIN ACTION (organisation admins): add a custom connector — body {code, name, summary?, server_url, auth}. |
+| `delete_custom_connector` | **destructive** | `connector` | ADMIN ACTION (organisation admins): delete a custom connector. |
 | `disable_connector` | write | `connector` | ADMIN ACTION (organisation admins; others get 403): switch a connector off for this organisation. |
+| `discover_connector_tools` | write | `connector` | ADMIN ACTION (organisation admins): read a CUSTOM connector's tools from its server (tools/list through one of its accounts; body {account_uuid?} picks one, else the first live account) and (re)generate their descriptors: effect from the… |
 | `enable_connector` | write | `connector` | ADMIN ACTION (organisation admins; others get 403): enable a catalog connector for this organisation by creating its organisation copy. |
+| `get_connector_tool` | read | `connector`, `tool` | One tool's current descriptor (tool = its exposed_as name): everything list_connector_tools shows plus the full content, binds_external_ref_provider, result cap, timeout_secs, upstream_tool, upstream_schema_hash, origin (catalog \| custom… |
 | `list_connector_accounts` | read | `connector` | List one connector's connected accounts (connector = its code, e.g. |
 | `list_connector_tools` | read | `connector` | List one connector's tools (connector = its code; `platform` for the platform's own agent tools), as {tools:[…]}: exposed_as (the name an agent calls), description, effect (read \| write \| destructive; catalog_effect is the catalog's ow… |
 | `list_connectors` | read | — | List the connectors this organisation can use, as {connectors:[…]}: every catalog entry (code, name, summary, preview, verified_on, catalog_version) with this organisation's copy of it — enabled, update_available (a newer catalog ver… |
+| `list_custom_connectors` | read | — | List the organisation's CUSTOM connectors, as {connectors:[…]}: a custom connector is any MCP server an org admin added by its address (an internal tool server, a self-hosted gateway) — code, name, summary, server_url, auth (methods:… |
 | `review_connector_tool` | **destructive** | `connector`, `tool` | ADMIN ACTION (organisation admins): review one connector tool (tool = its exposed_as name) — the organisation-wide on/off switch and its effect class. |
 | `set_environment_connector_override` | write | `connector`, `environment_uuid` | ADMIN ACTION (workspace admins of the environment's workspace, or organisation admins): make every session in this environment act through this account for the connector, ahead of the workspace's default — e.g. |
+| `update_connector_tool` | write | `connector`, `tool` | ADMIN ACTION (organisation admins): the DESCRIPTOR EDITOR's save — body {base_version, description?, effect?, params?, binds_external_ref_provider?, result?, timeout_secs?}. |
+| `update_custom_connector` | write | `connector` | ADMIN ACTION (organisation admins): edit a custom connector's name, summary, server_url or auth (send the whole definition minus code). |
 
 ## controllers
 
