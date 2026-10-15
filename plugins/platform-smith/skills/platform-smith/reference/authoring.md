@@ -13,22 +13,39 @@ bodies** — the actual agent config that lands in the runtime.
 | Field | Meaning |
 |---|---|
 | `concept` | One of: instructions, settings, skills, commands, mcp_servers, hooks, permissions, sandbox, agents, rules, output_styles, plugins |
-| `file_path` | Where it lands in the runtime (e.g. `.claude/CLAUDE.md`) |
+| `file_path` | Where it lands in the runtime, relative to the working directory: the instructions file is `CLAUDE.md` at the root (not `.claude/CLAUDE.md`); skills go under `.claude/skills/<name>/SKILL.md` |
 | `merge_strategy` | `append` \| `replace` \| `deep_merge` — how it combines with the same path inherited from an outer scope |
 | `content` | The file's text |
 
-**Configuration merges inner-over-outer**: environment beats project beats workspace. So the file you
-wrote is not necessarily the file that runs — read **`get_agent_definition_resolved_files`** for the
-effective merged set, which is what actually lands in the container.
+**Definitions merge company → workspace → project**, the inner level winning (an environment is not a
+definition scope). So the file you wrote is not necessarily the file that runs — read
+**`get_agent_definition_resolved_files`** for the effective merged set, which is what actually lands in
+the container.
 
 Secrets: attach **refs**, never values (`add_agent_definition_secret_ref`); check they resolve with
 `get_agent_definition_secret_refs_status`.
 
-**`create_agent_definition_file` only reaches a project-scoped definition** — it takes
+**The `*_agent_definition_file` tools only reach a project-scoped definition** — they take
 `project_uuid` as a path segment, so a company- or workspace-scoped definition 404s ("agent
-definition not found"), which reads as a tenancy problem but is a routing one. Use
-**`create_scoped_agent_definition_file`** (no scope/scope_id needed — the target definition's own
-scope is already fixed) for anything above project scope.
+definition not found"), which reads as a tenancy problem but is a routing one. Use the
+**`*_scoped_agent_definition_file`** family — `create_`, `get_`, `update_`, `delete_` — for a definition
+at any scope (no scope/scope_id needed; the definition's own scope is already fixed).
+`update_scoped_agent_definition_file` is partial: send only the fields that change.
+
+**Who may write**: a workspace admin edits their own workspace's agents, playbooks and sandbox
+profiles (including its projects'); organization-level ones need an organization admin. Anything
+else answers **403**; check `get_my_permissions`.
+
+### Recipe: an organization-level agent that conducts a playbook
+
+1. `create_scoped_agent_definition` with `scope: "company"` (no `scope_id`), e.g.
+   `{name, coding_agent_type: "claude_code"}`.
+2. `create_scoped_agent_definition_file` for `CLAUDE.md` (`concept: instructions`) and any skills.
+   Fix one with `update_scoped_agent_definition_file`, remove one with
+   `delete_scoped_agent_definition_file`; `list_agent_definition_files` shows the set.
+3. `create_playbook` **without** `workspace_uuid` (organization-level) and with
+   `agent_definition_uuid` set to the agent from step 1 — or bind later with `update_playbook`.
+4. `start_playbook_run` with the `workspace_uuid` to run in, then follow `get_playbook_run`.
 
 ## Workflow definitions — validate, publish, run
 
@@ -61,8 +78,8 @@ scope is already fixed) for anything above project scope.
 
 Secrets: attach **refs**, never values (`add_workflow_definition_secret_ref` — the exact
 counterpart of the agent-definition verb above); check they resolve with
-`get_workflow_definition_secret_refs_status`. There is no detach for either family — that's
-config surgery a human does knowingly.
+`get_workflow_definition_secret_refs_status`. Detach with `remove_agent_definition_secret_ref` /
+`remove_workflow_definition_secret_ref` — it only unlinks; the secret survives and can be re-attached.
 
 ### Calling an authenticated API: `rest-call`, never `HTTP`
 
@@ -117,8 +134,15 @@ the usual reason a graph that validated cleanly still dies:
 
 `create_playbook` and `update_playbook` author a playbook definition.
 
-`create_playbook` takes `{name, workspace_uuid, description?, tracks_work_items?}` — the first two
-are required and ps-api 400s with the offending field named.
+`create_playbook` takes `{name, workspace_uuid?, agent_definition_uuid?, description?,
+conductor_instructions?, tracks_work_items?}`. Only `name` is required. **Omit `workspace_uuid`** for an
+organization-level playbook (it runs in every workspace; creating one needs an organization admin).
+
+**Bind an agent, or it cannot run.** `agent_definition_uuid` is the agent that conducts each run; a
+playbook without one is refused by `start_playbook_run` with **422**. An organization playbook may bind
+only an organization-level agent; a workspace playbook binds an organization agent or one of its own
+workspace (400 otherwise). `update_playbook` with `agent_definition_uuid: <uuid>` binds, `null` unbinds,
+omitted leaves it. `list_company_playbooks` lists the organization-level ones.
 
 ⚠️ **The difference that will bite you**: playbooks have **no validate, no publish and no delete**.
 There is no draft state, so what you write is live immediately for every subsequent

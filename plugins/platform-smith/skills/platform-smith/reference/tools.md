@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-191 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+197 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -26,10 +26,12 @@
 | `create_scoped_agent_definition_file` | write | `agent_definition_uuid` | Create a file body on an agent definition AT ANY SCOPE (company, workspace, or project — no scope/scope_id needed, unlike create_scoped_agent_definition: the target definition's scope is already fixed). |
 | `delete_agent_definition` | **destructive** | `agent_definition_uuid` | Delete an agent definition. |
 | `delete_agent_definition_file` | **destructive** | `agent_definition_uuid`, `file_uuid`, `project_uuid` | Delete an agent-definition file body by file_uuid. |
+| `delete_scoped_agent_definition_file` | **destructive** | `agent_definition_uuid`, `file_uuid` | Delete one file body of an agent definition AT ANY SCOPE by file_uuid. |
 | `get_agent_definition` | read | `agent_definition_uuid` | Get an agent definition by UUID. |
 | `get_agent_definition_file` | read | `agent_definition_uuid`, `file_uuid`, `project_uuid` | Get one agent-definition file body by file_uuid. |
 | `get_agent_definition_resolved_files` | read | `agent_definition_uuid` | Get an agent definition's RESOLVED files — the effective set after inheritance and merge, i.e. |
 | `get_detected_secrets` | read | `project_uuid` | List secrets detected in a project's agent definitions (references/metadata only — never decrypted values). |
+| `get_scoped_agent_definition_file` | read | `agent_definition_uuid`, `file_uuid` | Get one file body of an agent definition AT ANY SCOPE (company, workspace or project) by file_uuid (from list_agent_definition_files). |
 | `list_agent_definition_files` | read | `agent_definition_uuid` | List an agent definition's files. |
 | `list_agent_definitions` | read | `project_uuid` | List agent definitions in a project. |
 | `list_scoped_agent_definitions` | read | `scope` | List agent definitions at the given scope (scope=project\|workspace\|company). |
@@ -37,6 +39,7 @@
 | `reset_agent_definition` | **destructive** | `agent_definition_uuid` | Reset an agent definition to default. |
 | `update_agent_definition` | write | `agent_definition_uuid` | Replace an agent definition (full PUT update, not a partial patch). |
 | `update_agent_definition_file` | write | `agent_definition_uuid`, `file_uuid`, `project_uuid` | Replace an agent-definition file body (full PUT). |
+| `update_scoped_agent_definition_file` | write | `agent_definition_uuid`, `file_uuid` | Update one file body of an agent definition AT ANY SCOPE. |
 
 ## agent-profiles
 
@@ -264,8 +267,9 @@
 |---|---|---|---|
 | `create_playbook` | write | — | Create a playbook definition. |
 | `get_playbook` | read | `playbook_uuid` | Get one playbook by UUID. |
+| `list_company_playbooks` | read | — | List the organization-level playbooks only (workspace_uuid null) — the ones that run in every workspace. |
 | `list_playbook_runs` | read | `playbook_uuid` | List the runs of one playbook — the history for that playbook. |
-| `list_workspace_playbooks` | read | `workspace_uuid` | List the playbooks available in a workspace. |
+| `list_workspace_playbooks` | read | `workspace_uuid` | List the playbooks available in a workspace: its own plus the organization's (a row with workspace_uuid null is organization-level). |
 | `update_playbook` | write | `playbook_uuid` | Update a playbook definition. |
 
 ## pr-url
@@ -335,7 +339,9 @@
 | `list_agent_definition_secret_refs` | read | `agent_definition_uuid` | List an agent definition's secret refs (references only — never values). |
 | `list_sandbox_profile_secret_refs` | read | `sandbox_profile_uuid` | List a sandbox profile's secret refs: {sandbox_profile_secret_ref_uuid, secret_name, inject_as, env_name}. |
 | `list_workflow_definition_secret_refs` | read | `workflow_definition_uuid` | List a workflow definition's secret refs (references only — never values). |
+| `remove_agent_definition_secret_ref` | **destructive** | `agent_definition_uuid`, `secret_ref_uuid` | Detach a secret ref from an agent definition (secret_ref_uuid from list_agent_definition_secret_refs). |
 | `remove_sandbox_profile_secret_ref` | **destructive** | `sandbox_profile_uuid`, `secret_ref_uuid` | Detach a secret ref from a sandbox profile. |
+| `remove_workflow_definition_secret_ref` | **destructive** | `secret_ref_uuid`, `workflow_definition_uuid` | Detach a secret ref from a workflow definition (secret_ref_uuid from list_workflow_definition_secret_refs) — the counterpart of remove_agent_definition_secret_ref. |
 
 ## secret-schemas
 
