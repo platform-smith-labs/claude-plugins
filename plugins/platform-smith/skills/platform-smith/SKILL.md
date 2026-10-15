@@ -1,6 +1,6 @@
 ---
 name: platform-smith
-description: Drive the PlatformSmith control plane over MCP (ps-mcp) — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, read results, author agent definitions, workflows and playbooks, set up automations (pull-request, tracker-comment, Slack, schedule and webhook triggers, comment commands, record-only work-item capture), and diagnose failures. Use whenever the ps-mcp MCP server is connected and the task involves PlatformSmith workspaces, projects, environments, runtimes, sessions, workflows, playbooks, automations, work items or artifacts.
+description: Drive the PlatformSmith control plane over MCP (ps-mcp) — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, read results, author agent definitions, workflows and playbooks (and copy them, read their history, and apply their updates), set up automations (pull-request, tracker-comment, Slack, schedule and webhook triggers, comment commands, record-only work-item capture), govern which connector tools agent sessions may call (connectors, guardrails, the tool audit), and diagnose failures. Use whenever the ps-mcp MCP server is connected and the task involves PlatformSmith workspaces, projects, environments, runtimes, sessions, workflows, playbooks, automations, work items or artifacts.
 ---
 
 # PlatformSmith over MCP
@@ -43,13 +43,29 @@ model loose on a customer's repository. Two checks come first:
 | Launch, run a session, follow it, get results | `reference/running-work.md` |
 | Check whether a Dockerfile generation validated and find its pull request | `reference/running-work.md` §7 |
 | Author agent definitions, workflows, playbooks, sandbox profiles | `reference/authoring.md` |
+| Copy an agent, playbook or sandbox profile, read its history, or take its parent's update | `reference/authoring.md` (Copies, history and updates) |
+| See exactly what a session's agent received | `reference/troubleshooting.md` |
 | Make something run on its own — on a pull request, a comment command, a ticket, a Slack alert, a schedule or a webhook | `reference/automations.md` |
 | Find out why an automation did not fire, or who a run acted as | `reference/troubleshooting.md`, `reference/automations.md` |
 | Work out why something failed | `reference/troubleshooting.md` |
+| See or govern which connector tools (Jira, Linear, Sentry, …) a session's agent may call, or why a call was blocked | `reference/connectors.md` |
 | Understand what a platform CONCEPT means | the documentation site — below |
 
 The server also carries prompts you can pull directly: `platform_smith_guide` (the full domain
 narrative), `diagnose_stuck_launch`, `credential_preflight`, and `authoring_guide`.
+
+## Copies, not merging
+
+An agent definition, playbook or sandbox profile at the organization, a workspace or a project is **its
+own complete copy** — what it holds is exactly what its runtime gets; nothing is merged from an outer
+level at launch. A copy records its **parent**, and updates never arrive on their own: the parent's owner
+**publishes** a version (only published versions count), the copy shows `update_available`, and a person
+reviews it with `get_agent_definition_update` and applies it with `apply_agent_definition_update` —
+deciding `take` or `keep` for every item both sides changed. One level at a time: a project copy follows
+its workspace copy. Every save is a version you can list, compare and restore. Agent files can be
+**links** (`link_target`, e.g. `CLAUDE.md` → `AGENTS.md`) or executable (`is_executable`). And
+`get_session_snapshot` is the record of what a session's agent actually received, stored before secret
+substitution. Details: `reference/authoring.md`.
 
 ## Automations
 
@@ -100,6 +116,24 @@ nothing runs). Once **enabled** it starts the target **unattended** every time t
 
 Recipes and the full reason table: `reference/automations.md`.
 
+## Connectors and guardrails
+
+A **connector** is a vendor's MCP server (Jira, Linear, GitHub, Sentry, …) whose tools a
+coding-agent session can call through the platform; `platform` is the built-in one. Connectors are
+not integrations — those are the credentials the platform itself uses. A session gets a connector
+tool only when the agent definition's `.platform-smith/tools.json` lists it, the organisation has
+enabled the connector and reviewed the tool, no **guardrail** blocks it (guardrails only restrict;
+the strictest wins), and **wiring** picks an account (environment override → workspace default →
+the only account assigned).
+
+- `preview_session_tools` shows what a session would get, and why, before anything launches.
+- "Why can't my agent call X?" — `get_session_tools`, then `explain_tool_decision` on its audit row.
+  The audit (`list_tool_audit`) is metadata only: never a call's arguments or result.
+- Enabling connectors, reviewing tools, guardrails and account assignment are **admin actions** —
+  ask the person first. Connecting an account is done in the UI under **Org → Connectors**.
+
+Details: `reference/connectors.md`.
+
 ## The documentation site — tools for state, docs for concepts
 
 This skill and the tool inventory teach you the platform's **verbs**. They do not teach its
@@ -147,13 +181,15 @@ lag a deployment. So never answer a question about *this tenant* from the docs, 
   back** — there is no tool, and asking for one differently will not produce one.
 - **Administration is not exposed, deliberately.** No PAT or workspace-token minting, no RBAC, no
   user creation, no integration setup (connecting GitHub, Bitbucket, Slack, Jira or Linear,
-  Receives events, workspace assignment, linking people), no changing the command prefix, no
-  workspace/project/environment CRUD. If you need one of
+  Receives events, workspace assignment, linking people), no connecting or removing a connector
+  account, no changing the command prefix, no workspace/project/environment CRUD. (Connector
+  *governance* over accounts that already exist — guardrails, tool reviews, wiring — is exposed, as
+  admin actions; see above.) If you need one of
   these, **say exactly what is blocked and ask the human to do it in the UI** — that is more useful
   than a workaround, and there is no workaround.
 - **There is no push.** Session events are a cursor-poll loop; there is no streaming and no
   blocking wait. See `reference/running-work.md`.
-- **The resource list looks empty, and that is correct.** Artifacts and resolved files ARE readable
+- **The resource list looks empty, and that is correct.** Artifacts ARE readable
   as MCP resources, but they are published as URI *templates* — the readable set is per-tenant, so
   there is nothing tenant-independent to enumerate. If your client reports "no resources", it is
   reading the wrong list. Read one directly at

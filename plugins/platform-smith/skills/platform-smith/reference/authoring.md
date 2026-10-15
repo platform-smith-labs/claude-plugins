@@ -14,13 +14,26 @@ bodies** — the actual agent config that lands in the runtime.
 |---|---|
 | `concept` | One of: instructions, settings, skills, commands, mcp_servers, hooks, permissions, sandbox, agents, rules, output_styles, plugins |
 | `file_path` | Where it lands in the runtime, relative to the working directory: the instructions file is `CLAUDE.md` at the root (not `.claude/CLAUDE.md`); skills go under `.claude/skills/<name>/SKILL.md` |
-| `merge_strategy` | `append` \| `replace` \| `deep_merge` — how it combines with the same path inherited from an outer scope |
-| `content` | The file's text |
+| `content` | The file's text (empty for a link) |
+| `link_target` | Optional. Makes the row a **link** to another path in the same definition — see *Links* below |
+| `is_executable` | Optional. `true` writes the file with mode `0750` instead of `0640` (scripts, hooks) |
 
-**Definitions merge company → workspace → project**, the inner level winning (an environment is not a
-definition scope). So the file you wrote is not necessarily the file that runs — read
-**`get_agent_definition_resolved_files`** for the effective merged set, which is what actually lands in
-the container.
+**What a definition holds is exactly what runs.** Nothing is merged in from an organization or
+workspace definition at launch, so `list_agent_definition_files` is the file set the runtime gets.
+Copies, history and updates are below.
+
+### Links
+
+A file with `link_target` is a symlink to another path **in the same definition**, and holds no content.
+Use one to give two harnesses the same file without keeping two copies in step:
+
+- `CLAUDE.md` → `AGENTS.md` (a file link), or
+- `.agents/skills/review` → `.claude/skills/review` (a folder link — name the folder, no trailing slash).
+
+The target must exist, must not itself be a link or sit inside a linked folder, and must be in the same
+root (both relative to the working directory, or both under `~/`). `tools.json`, the settings files and
+`.mcp.json` cannot be links. Deleting or renaming a file that a link points at is refused, naming the
+link. The sandbox gets a relative symlink.
 
 Secrets: attach **refs**, never values (`add_agent_definition_secret_ref`); check they resolve with
 `get_agent_definition_secret_refs_status`.
@@ -31,6 +44,53 @@ definition not found"), which reads as a tenancy problem but is a routing one. U
 **`*_scoped_agent_definition_file`** family — `create_`, `get_`, `update_`, `delete_` — for a definition
 at any scope (no scope/scope_id needed; the definition's own scope is already fixed).
 `update_scoped_agent_definition_file` is partial: send only the fields that change.
+
+## Copies, history and updates (agent definitions, playbooks, sandbox profiles)
+
+An agent definition, playbook or sandbox profile at a workspace or project is **its own complete copy**.
+A copy records its **parent** (the item it was copied from, one level out) and the parent version it last
+took. Every read carries `version`, `parent`, `parent_revision`, `edited`, `update_available`,
+`detached_at`, `copies_read_only` and `read_only`.
+
+**Make a copy**: `copy_agent_definition` (into a workspace or a project), `copy_playbook` (organization →
+workspace; playbooks have no project scope), or `clone_sandbox_profile`.
+
+**History.** Every save that changes something records a version — `list_agent_definition_versions`,
+`get_agent_definition_version`, `compare_agent_definition_versions`. `restore_agent_definition_version`
+makes an old version current as a **new** version, so nothing is ever lost and a restore can itself be
+undone. Deleting a file is a version too.
+
+**Updates are applied by a person, never pushed:**
+
+1. The parent's owner saves, then **publishes**: `publish_agent_definition`. **Only published versions
+   count as updates** — saving is never gated and an unpublished edit already runs for the parent itself.
+2. A copy whose parent published something newer shows `update_available: {version}`.
+3. On the copy, `get_agent_definition_update` shows each item — a file (by path), the secret refs, the
+   settings — with a status: `theirs_changed` (only the parent changed; taken by default),
+   `mine_changed` (only the copy changed; kept by default), `both_changed` (**must be decided**),
+   `added`, `removed`, `unchanged`.
+4. Show the person, then `apply_agent_definition_update` with `{version, decisions}`. An **unedited** copy
+   (`edited: false`) takes the update whole — send `{version}` alone. An **edited** copy needs
+   `"take"` or `"keep"` for every `both_changed` item.
+
+**One level at a time.** A project copy's parent is the workspace copy, so an organization change reaches
+the project only after the workspace copy has applied it and published that version.
+
+**On a parent** (ask the person first): `apply_agent_definition_to_copies` updates every unedited copy
+that is behind and lists the edited ones it skipped — those need step 3–4 on their own.
+`set_agent_definition_copies_read_only` makes copies update-only: applying still works, but editing,
+restoring or detaching one is refused (409 naming the parent). **Detach**
+(`detach_agent_definition`) stops a copy's updates for good; there is no re-attach.
+
+Playbooks and sandbox profiles have the same verbs: `list_playbook_versions`, `publish_playbook`,
+`get_playbook_update`, `apply_playbook_update`, `apply_playbook_to_copies`, `detach_playbook`, …, and
+`list_sandbox_profile_versions`, `publish_sandbox_profile`, `get_sandbox_profile_update`,
+`apply_sandbox_profile_update`, … Their items differ: a sandbox profile has its script, secret refs and
+settings; a playbook its conductor instructions and settings (including the bound agent).
+
+In version, compare and update results each item is `{key, kind, …}`: a file item carries `path`,
+`content`, `link_target` and `is_executable`; a settings or secret-refs item carries its values in
+`fields` (an object). Secret-ref items hold names and usage only — never a secret value.
 
 **Who may write**: a workspace admin edits their own workspace's agents, playbooks and sandbox
 profiles (including its projects'); organization-level ones need an organization admin. Anything
@@ -144,9 +204,10 @@ only an organization-level agent; a workspace playbook binds an organization age
 workspace (400 otherwise). `update_playbook` with `agent_definition_uuid: <uuid>` binds, `null` unbinds,
 omitted leaves it. `list_company_playbooks` lists the organization-level ones.
 
-⚠️ **The difference that will bite you**: playbooks have **no validate, no publish and no delete**.
-There is no draft state, so what you write is live immediately for every subsequent
-`start_playbook_run` — and permanent, because nothing removes it.
+⚠️ **The difference that will bite you**: playbooks have **no validate, no draft and no delete**.
+What you write is live immediately for every subsequent `start_playbook_run`, and nothing removes it.
+Every save is recorded, so `restore_playbook_version` undoes a bad edit. (`publish_playbook` is not a
+draft gate: it only offers the current version to the playbook's copies.)
 
 `update_playbook` is a **partial** update despite the PUT verb: omitted fields are **preserved**
 (verified live). You do not need to read-modify-write the whole object to change one field.
@@ -154,7 +215,7 @@ There is no draft state, so what you write is live immediately for every subsequ
 So:
 
 1. Name it deliberately — you cannot delete it later.
-2. Write it right the first time; there is no validate step to catch you.
+2. Write it right the first time; there is no validate step to catch you (history lets you go back).
 3. Run with `start_playbook_run`; follow with `get_playbook_run`; history via `list_playbook_runs` /
    `list_workspace_playbook_runs`.
 
@@ -170,7 +231,8 @@ a service or a dependency install the base sandbox image lacks.
    profile the project can use and `resolved`, the one a launch with no choice would run.
 3. **Write it**: `create_sandbox_profile` at the narrowest scope that fits (usually the project).
    To specialise an organization profile, `clone_sandbox_profile` into the project and
-   `update_sandbox_profile` the copy — the source is unaffected.
+   `update_sandbox_profile` the copy — the source is unaffected, and the copy is offered the source's
+   later **published** versions as updates (see *Copies, history and updates*).
 4. **Secrets are references**, never script text: `add_sandbox_profile_secret_ref` with the
    secret's name, then `get_sandbox_profile_secret_refs_status` with the project_uuid you will launch.
    Secrets reach only the script, masked in its output.

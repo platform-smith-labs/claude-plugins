@@ -25,9 +25,6 @@ correctly. (`get_agent_definition_secret_refs_status` looks like the natural esc
 **not**: coding-agent credentials are not modeled as definition-level secret refs at all, so it
 returns `[]` for a genuinely credentialed definition. Don't rely on it here.)
 
-**`preview_agent_definition` does NOT report availability.** It is merged config — a config view, not
-a selection surface.
-
 ### If a start is refused
 That refusal is **correct behaviour, not a transient fault**. Branch on the machine-readable code in
 `error.detail`: `coding_agent_credential_unavailable` (the umbrella) or `credential_unusable`. **Do
@@ -137,7 +134,6 @@ the poll again from the beginning.
   | `psmcp://sessions/{session_uuid}/artifacts/{artifact_version_uuid}` | `list_session_artifacts` |
   | `psmcp://projects/{project_uuid}/artifacts/{artifact_version_uuid}` | `list_scoped_artifacts` (scope=project) |
   | `psmcp://workspaces/{workspace_uuid}/artifacts/{artifact_version_uuid}` | `list_scoped_artifacts` (scope=workspace) |
-  | `psmcp://agent-definitions/{agent_definition_uuid}/resolved-files` | `list_agent_definitions` |
 
   ⚠️ **Your client's resource LISTING will be empty**, and that is not a fault. These are published
   as URI *templates* (`resources/templates/list`), not as an enumerable set (`resources/list`) —

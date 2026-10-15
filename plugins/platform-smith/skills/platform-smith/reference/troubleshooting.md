@@ -91,9 +91,16 @@ account is claimed elsewhere, another organization holds it, and nothing on this
 
 ## The runtime does not behave like its definition says
 
-**`get_agent_definition_resolved_files`** — the effective merged file set, which is what actually
-lands in the container. Compare against `list_agent_definition_files` (what the definition itself
-declares). Inheritance from an outer scope is almost always the difference.
+**`get_session_snapshot`** — what that session's agent **actually received**: the agent definition and
+the version it ran, how it was chosen (a mandatory definition overrides an explicit pick), the sandbox
+profile and its version, and the file list; **`get_session_snapshot_file`** reads one file. Nothing is
+merged at launch, so if the snapshot differs from the definition today, the definition **changed since
+the session started** — `compare_agent_definition_versions` shows what. Files are stored before secret
+substitution: a file marked `has_secret_placeholders` shows the placeholder, never the value. A session
+may have no snapshot (recording is best effort, and older sessions predate it).
+
+A copy that "should have" picked up an organization change has not, unless someone applied it:
+`get_agent_definition_update` on the copy shows what is waiting. Only **published** versions count.
 
 ## A published workflow runs but a node fails on credentials
 

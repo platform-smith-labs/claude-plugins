@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-197 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+248 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -20,26 +20,35 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
+| `apply_agent_definition_to_copies` | **destructive** | `agent_definition_uuid` | On a PARENT: apply its newest PUBLISHED version to every direct copy that is behind and UNEDITED. |
+| `apply_agent_definition_update` | write | `agent_definition_uuid` | Apply the parent's update to this COPY. |
+| `compare_agent_definition_versions` | read | `agent_definition_uuid`, `base`, `head` | Compare two versions of one agent definition, item by item. |
+| `copy_agent_definition` | write | `agent_definition_uuid` | Make a copy of an agent definition in a workspace or project. |
 | `create_agent_definition` | write | `project_uuid` | Create an agent definition in a project. |
-| `create_agent_definition_file` | write | `agent_definition_uuid`, `project_uuid` | Create a file body on an agent definition. |
+| `create_agent_definition_file` | write | `agent_definition_uuid`, `project_uuid` | Create a file on a PROJECT-level agent definition. |
 | `create_scoped_agent_definition` | write | `scope` | Create an agent definition at the given scope (scope=project\|workspace\|company, scope_id=that container's UUID; omit scope_id for scope=company — the company is taken from your identity). |
 | `create_scoped_agent_definition_file` | write | `agent_definition_uuid` | Create a file body on an agent definition AT ANY SCOPE (company, workspace, or project — no scope/scope_id needed, unlike create_scoped_agent_definition: the target definition's scope is already fixed). |
 | `delete_agent_definition` | **destructive** | `agent_definition_uuid` | Delete an agent definition. |
-| `delete_agent_definition_file` | **destructive** | `agent_definition_uuid`, `file_uuid`, `project_uuid` | Delete an agent-definition file body by file_uuid. |
-| `delete_scoped_agent_definition_file` | **destructive** | `agent_definition_uuid`, `file_uuid` | Delete one file body of an agent definition AT ANY SCOPE by file_uuid. |
+| `delete_agent_definition_file` | **destructive** | `agent_definition_uuid`, `file_uuid`, `project_uuid` | Delete an agent-definition file by file_uuid. |
+| `delete_scoped_agent_definition_file` | **destructive** | `agent_definition_uuid`, `file_uuid` | Delete one file of an agent definition AT ANY SCOPE by file_uuid. |
+| `detach_agent_definition` | **destructive** | `agent_definition_uuid` | Detach a COPY from its parent: it keeps its current content but stops recording a parent and is never offered updates again (detached_at is set, so reads can say why no update shows). |
 | `get_agent_definition` | read | `agent_definition_uuid` | Get an agent definition by UUID. |
 | `get_agent_definition_file` | read | `agent_definition_uuid`, `file_uuid`, `project_uuid` | Get one agent-definition file body by file_uuid. |
-| `get_agent_definition_resolved_files` | read | `agent_definition_uuid` | Get an agent definition's RESOLVED files — the effective set after inheritance and merge, i.e. |
+| `get_agent_definition_update` | read | `agent_definition_uuid` | Read the update a COPY can take from its parent: {base_version (the parent version this copy last took), theirs_version (the parent's newest PUBLISHED version), edited (whether this copy changed since), items:[{key, kind, status, base, t… |
+| `get_agent_definition_version` | read | `agent_definition_uuid`, `version` | Get one version of a agent definition with its content: the version row plus items[] of {key, kind, path?, content?, link_target?, is_executable?, fields?}. |
 | `get_detected_secrets` | read | `project_uuid` | List secrets detected in a project's agent definitions (references/metadata only — never decrypted values). |
 | `get_scoped_agent_definition_file` | read | `agent_definition_uuid`, `file_uuid` | Get one file body of an agent definition AT ANY SCOPE (company, workspace or project) by file_uuid (from list_agent_definition_files). |
 | `list_agent_definition_files` | read | `agent_definition_uuid` | List an agent definition's files. |
+| `list_agent_definition_versions` | read | `agent_definition_uuid` | List a agent definition's saved versions, newest first: [{version, change (saved \| restored \| applied \| copied \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_user_uuid}]. |
 | `list_agent_definitions` | read | `project_uuid` | List agent definitions in a project. |
 | `list_scoped_agent_definitions` | read | `scope` | List agent definitions at the given scope (scope=project\|workspace\|company). |
-| `preview_agent_definition` | read | `project_uuid` | Preview the effective (merged) agent-definition config for a project. |
+| `publish_agent_definition` | write | `agent_definition_uuid` | Publish a agent definition's CURRENT version: mark it as released to its copies. |
 | `reset_agent_definition` | **destructive** | `agent_definition_uuid` | Reset an agent definition to default. |
+| `restore_agent_definition_version` | write | `agent_definition_uuid`, `version` | Restore an earlier version of a agent definition: its content becomes the current content as a NEW version (change=restored). |
+| `set_agent_definition_copies_read_only` | write | `agent_definition_uuid` | On a PARENT: set whether its copies are read-only. |
 | `update_agent_definition` | write | `agent_definition_uuid` | Replace an agent definition (full PUT update, not a partial patch). |
-| `update_agent_definition_file` | write | `agent_definition_uuid`, `file_uuid`, `project_uuid` | Replace an agent-definition file body (full PUT). |
-| `update_scoped_agent_definition_file` | write | `agent_definition_uuid`, `file_uuid` | Update one file body of an agent definition AT ANY SCOPE. |
+| `update_agent_definition_file` | write | `agent_definition_uuid`, `file_uuid`, `project_uuid` | Replace an agent-definition file (full PUT). |
+| `update_scoped_agent_definition_file` | write | `agent_definition_uuid`, `file_uuid` | Update one file of an agent definition AT ANY SCOPE. |
 
 ## agent-profiles
 
@@ -47,6 +56,15 @@
 |---|---|---|---|
 | `get_agent_profile` | read | `type` | Get an agent profile by type. |
 | `list_agent_profiles` | read | — | List available agent profiles (distinct from agent definitions). |
+
+## agent-tools
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `explain_tool_decision` | read | `audit_uuid` | Why one tool call (audit_uuid from list_tool_audit or get_session_tools) was decided the way it was, as {audit, grant_record, evaluation, rules}: the audit row, the session's grant record, this tool's evaluation at launch (granted or lef… |
+| `get_session_tools` | read | `session_uuid` | What a session was granted at launch and why, as {session_uuid, grant_record, granted [{name, approval ask\|allow}], left_out [{name, reason_code}], recent_calls}: the grant record (definition_tools_hash, every evaluation with its rules a… |
+| `list_tool_audit` | read | — | The tool-call audit, newest first, as {items:[…], next_before}: one row per agent tool call — session, workspace, environment, tool, connector_code, effect, the account and identity_mode it acted through, decision (e.g. |
+| `preview_session_tools` | write | — | Preview — writing nothing — which tools a session would get if launched now in a workspace (optionally a project and environment) with a given tools file, and why. |
 
 ## artifact-versions
 
@@ -61,6 +79,7 @@
 | `get_artifact` | read | `artifact_version_uuid`, `session_uuid` | Fetch ONE artifact by its artifact_version_uuid (from list_session_artifacts). |
 | `get_scoped_artifact` | read | `artifact_version_uuid`, `scope`, `scope_id` | Fetch ONE project- or workspace-scoped artifact by its artifact_version_uuid (from list_scoped_artifacts). |
 | `get_work_item_artifact` | read | `artifact_uuid`, `work_item_uuid`, `workspace_uuid` | Read the CONTENT of an artifact attached to a work item — including one an earlier session attached. |
+| `list_artifact_versions` | read | `artifact_uuid` | List an artifact's version history, newest first, with the author and timestamp of each. |
 | `list_scoped_artifacts` | read | `scope`, `scope_id` | List artifacts at project or workspace scope (scope=project\|workspace, scope_id=that container's UUID). |
 | `list_session_artifacts` | read | `session_uuid` | List a session's artifacts. |
 | `list_workspace_artifact_rollup` | read | `workspace_uuid` | List EVERY artifact under a workspace — its own, its projects' and their sessions' — in one call, with scope as a filter rather than a wall. |
@@ -139,6 +158,21 @@
 | `get_integration_connection` | read | `connection_uuid` | Get one integration connection's metadata and status (read-only, never a decrypted value) — is it enabled, what auth_type does it carry, which accounts sit under it (each with receives_events, suspended and its workspace assignment), a… |
 | `list_integration_connections` | read | — | List the company's integration connections — every provider (GitHub, Bitbucket, Slack, Jira, Linear, the claude_code / codex credentials a runtime needs, model providers), each with its accounts (receives_events, suspended, workspace a… |
 
+## connectors
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `apply_connector_update` | write | `connector` | ADMIN ACTION (organisation admins): bring this organisation's copy of a connector up to the newer catalog version (list_connectors shows update_available). |
+| `assign_connector_account` | **destructive** | `account_uuid` | ADMIN ACTION (organisation admins): REPLACE which workspaces an existing connector account serves (account_uuid from list_connector_accounts), as assignments [{workspace_uuid (null = every workspace), label, is_default}]. |
+| `clear_environment_connector_override` | **destructive** | `connector`, `environment_uuid` | ADMIN ACTION: remove an environment's account override for a connector; sessions there fall back to the workspace's default account, or the only account assigned to it. |
+| `disable_connector` | write | `connector` | ADMIN ACTION (organisation admins; others get 403): switch a connector off for this organisation. |
+| `enable_connector` | write | `connector` | ADMIN ACTION (organisation admins; others get 403): enable a catalog connector for this organisation by creating its organisation copy. |
+| `list_connector_accounts` | read | `connector` | List one connector's connected accounts (connector = its code, e.g. |
+| `list_connector_tools` | read | `connector` | List one connector's tools (connector = its code; `platform` for the platform's own agent tools), as {tools:[…]}: exposed_as (the name an agent calls), description, effect (read \| write \| destructive; catalog_effect is the catalog's ow… |
+| `list_connectors` | read | — | List the connectors this organisation can use, as {connectors:[…]}: every catalog entry (code, name, summary, preview, verified_on, catalog_version) with this organisation's copy of it — enabled, update_available (a newer catalog ver… |
+| `review_connector_tool` | **destructive** | `connector`, `tool` | ADMIN ACTION (organisation admins): review one connector tool (tool = its exposed_as name) — the organisation-wide on/off switch and its effect class. |
+| `set_environment_connector_override` | write | `connector`, `environment_uuid` | ADMIN ACTION (workspace admins of the environment's workspace, or organisation admins): make every session in this environment act through this account for the connector, ahead of the workspace's default — e.g. |
+
 ## controllers
 
 | Tool | Effect | Required args | Purpose |
@@ -185,6 +219,16 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `get_project_git_link` | read | `project_uuid` | Get a project's git link — which repo and branch it is bound to, and which integration account authorizes it (integration_account_uuid, account_login, provider_code), or none for a public repo (read-only). |
+
+## guardrails
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `create_guardrail` | write | — | ADMIN ACTION: add a guardrail — a rule that BLOCKS a tool or makes each call wait for a person's APPROVAL — for one tool, a platform family, a whole connector or an effect, at company, workspace, project or environment level. |
+| `delete_guardrail` | **destructive** | `guardrail_uuid` | ADMIN ACTION: delete a guardrail (written as a tombstone revision; its history stays readable). |
+| `list_guardrail_revisions` | read | `guardrail_uuid` | A guardrail's history, as {revisions:[…]}: every version with its what / action / where, who set it (set_by_user_uuid) and when; tombstone true is the deletion. |
+| `list_guardrails` | read | — | List guardrails, as {guardrails:[…]}: organisation-wide rules, plus — with workspace_uuid (and optionally project_uuid / environment_uuid) — the rules reaching that place; connector narrows to rules about one connector. |
+| `update_guardrail` | **destructive** | `guardrail_uuid` | ADMIN ACTION: replace a guardrail's what / action / where — send the whole rule. |
 
 ## harness-catalog
 
@@ -265,11 +309,22 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
+| `apply_playbook_to_copies` | **destructive** | `playbook_uuid` | On a PARENT: apply its newest PUBLISHED version to every direct copy that is behind and UNEDITED. |
+| `apply_playbook_update` | write | `playbook_uuid` | Apply the parent's update to this COPY. |
+| `compare_playbook_versions` | read | `base`, `head`, `playbook_uuid` | Compare two versions of one playbook, item by item. |
+| `copy_playbook` | write | `playbook_uuid` | Copy an organization-level playbook into a workspace (playbooks have no project scope). |
 | `create_playbook` | write | — | Create a playbook definition. |
-| `get_playbook` | read | `playbook_uuid` | Get one playbook by UUID. |
+| `detach_playbook` | **destructive** | `playbook_uuid` | Detach a COPY from its parent: it keeps its current content but stops recording a parent and is never offered updates again (detached_at is set, so reads can say why no update shows). |
+| `get_playbook` | read | `playbook_uuid` | Get one playbook by UUID, with its version and the copy fields: parent ({uuid, name, scope_type, is_archived} or null — the organization playbook it was copied from), parent_revision, edited, update_available ({version} or null; get_pl… |
+| `get_playbook_update` | read | `playbook_uuid` | Read the update a COPY can take from its parent: {base_version (the parent version this copy last took), theirs_version (the parent's newest PUBLISHED version), edited (whether this copy changed since), items:[{key, kind, status, base, t… |
+| `get_playbook_version` | read | `playbook_uuid`, `version` | Get one version of a playbook with its content: the version row plus items[] of {key, kind, path?, content?, link_target?, is_executable?, fields?}. |
 | `list_company_playbooks` | read | — | List the organization-level playbooks only (workspace_uuid null) — the ones that run in every workspace. |
 | `list_playbook_runs` | read | `playbook_uuid` | List the runs of one playbook — the history for that playbook. |
+| `list_playbook_versions` | read | `playbook_uuid` | List a playbook's saved versions, newest first: [{version, change (saved \| restored \| applied \| copied \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_user_uuid}]. |
 | `list_workspace_playbooks` | read | `workspace_uuid` | List the playbooks available in a workspace: its own plus the organization's (a row with workspace_uuid null is organization-level). |
+| `publish_playbook` | write | `playbook_uuid` | Publish a playbook's CURRENT version: mark it as released to its copies. |
+| `restore_playbook_version` | write | `playbook_uuid`, `version` | Restore an earlier version of a playbook: its content becomes the current content as a NEW version (change=restored). |
+| `set_playbook_copies_read_only` | write | `playbook_uuid` | On a PARENT: set whether its copies are read-only. |
 | `update_playbook` | write | `playbook_uuid` | Update a playbook definition. |
 
 ## pr-url
@@ -284,6 +339,7 @@
 |---|---|---|---|
 | `get_project` | read | `project_uuid` | Get a single project by UUID. |
 | `list_projects` | read | `workspace_uuid` | List projects in a workspace. |
+| `restore_project` | write | `project_uuid` | Restore an archived project, making it and its environments reachable again. |
 
 ## readiness
 
@@ -296,13 +352,6 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `register_automation_webhook` | write | `automation_uuid`, `workspace_uuid` | Retry registering a TRACKER automation's provider webhook (jira, linear, github issues) when get_automation shows webhook_registered false. |
-
-## restore
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `restore_project` | write | `project_uuid` | Restore an archived project, making it and its environments reachable again. |
-| `restore_sandbox_profile` | **destructive** | `sandbox_profile_uuid` | Restore an archived sandbox profile. |
 
 ## runtimes
 
@@ -319,11 +368,22 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
+| `apply_sandbox_profile_to_copies` | **destructive** | `sandbox_profile_uuid` | On a PARENT: apply its newest PUBLISHED version to every direct copy that is behind and UNEDITED. |
+| `apply_sandbox_profile_update` | write | `sandbox_profile_uuid` | Apply the parent's update to this COPY. |
 | `archive_sandbox_profile` | **destructive** | `sandbox_profile_uuid` | Archive a sandbox profile (nothing is deleted; restore_sandbox_profile brings it back). |
 | `clone_sandbox_profile` | write | `sandbox_profile_uuid` | Copy a sandbox profile, with its secret refs, into the same scope or a narrower one. |
+| `compare_sandbox_profile_versions` | read | `base`, `head`, `sandbox_profile_uuid` | Compare two versions of one sandbox profile, item by item. |
 | `create_sandbox_profile` | write | `scope` | Create a sandbox profile at a scope (scope=project\|workspace\|company; omit scope_id for company). |
-| `get_sandbox_profile` | read | `sandbox_profile_uuid` | Get one sandbox profile, including its script and its secret_refs (names and env var names only — never values). |
+| `detach_sandbox_profile` | **destructive** | `sandbox_profile_uuid` | Detach a COPY from its parent: it keeps its current content but stops recording a parent and is never offered updates again (detached_at is set, so reads can say why no update shows). |
+| `get_sandbox_profile` | read | `sandbox_profile_uuid` | Get one sandbox profile, including its script and its secret_refs (names and env var names only — never values), its version, and the copy fields: parent ({uuid, name, scope_type, is_archived} or null — the profile it was cloned from… |
+| `get_sandbox_profile_update` | read | `sandbox_profile_uuid` | Read the update a COPY can take from its parent: {base_version (the parent version this copy last took), theirs_version (the parent's newest PUBLISHED version), edited (whether this copy changed since), items:[{key, kind, status, base, t… |
+| `get_sandbox_profile_version` | read | `sandbox_profile_uuid`, `version` | Get one version of a sandbox profile with its content: the version row plus items[] of {key, kind, path?, content?, link_target?, is_executable?, fields?}. |
+| `list_sandbox_profile_versions` | read | `sandbox_profile_uuid` | List a sandbox profile's saved versions, newest first: [{version, change (saved \| restored \| applied \| copied \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_user_uuid}]. |
 | `list_sandbox_profiles` | read | `scope` | List the sandbox profiles OWNED by one scope (scope=project\|workspace\|company; omit scope_id for company). |
+| `publish_sandbox_profile` | write | `sandbox_profile_uuid` | Publish a sandbox profile's CURRENT version: mark it as released to its copies. |
+| `restore_sandbox_profile` | **destructive** | `sandbox_profile_uuid` | Restore an archived sandbox profile. |
+| `restore_sandbox_profile_version` | write | `sandbox_profile_uuid`, `version` | Restore an earlier version of a sandbox profile: its content becomes the current content as a NEW version (change=restored). |
+| `set_sandbox_profile_copies_read_only` | write | `sandbox_profile_uuid` | On a PARENT: set whether its copies are read-only. |
 | `update_sandbox_profile` | write | `sandbox_profile_uuid` | Update a sandbox profile. |
 
 ## secret-refs
@@ -368,6 +428,8 @@
 | `create_session` | **destructive** | — | Create a runtime session directly (the non-workflow path to a working session). |
 | `get_session` | read | `name` | Get a session by name. |
 | `get_session_events` | read | `name` | Cursor-poll a session's events. |
+| `get_session_snapshot` | read | `session_uuid` | Read what a session's agent ACTUALLY received when it was spawned — the evidence for "what was it running?", rather than what its definition says today. |
+| `get_session_snapshot_file` | read | `path`, `session_uuid` | Read one file from a session's snapshot: {path, content, sha256, source}. |
 | `list_conversation_sessions` | read | `conversation_uuid`, `workspace_uuid` | List the runtime sessions backing an A2A conversation's participants — the bridge from 'what was said' to 'which session said it', then on to that session's events and artifacts. |
 | `list_sessions` | read | — | List runtime sessions the caller can access. |
 | `list_workspace_sessions` | read | `workspace_uuid` | List sessions scoped to one workspace. |
@@ -443,12 +505,6 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `get_type_scheme_validation` | read | `type_scheme_uuid` | Report whether a type scheme is usable, and every defect blocking it. |
-
-## versions
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `list_artifact_versions` | read | `artifact_uuid` | List an artifact's version history, newest first, with the author and timestamp of each. |
 
 ## work-item
 
