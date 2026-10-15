@@ -44,6 +44,7 @@ model loose on a customer's repository. Two checks come first:
 | Check whether a Dockerfile generation validated and find its pull request | `reference/running-work.md` §7 |
 | Author agent definitions, workflows, playbooks, sandbox profiles | `reference/authoring.md` |
 | Copy an agent, playbook or sandbox profile, read its history, or take its parent's update | `reference/authoring.md` (Copies, history and updates) |
+| Export or import an agent, playbook or sandbox profile, edit many files at once, or duplicate an agent | `reference/authoring.md` (Export, import and bulk edits) |
 | See exactly what a session's agent received | `reference/troubleshooting.md` |
 | Make something run on its own — on a pull request, a comment command, a ticket, a Slack alert, a schedule or a webhook | `reference/automations.md` |
 | Find out why an automation did not fire, or who a run acted as | `reference/troubleshooting.md`, `reference/automations.md` |

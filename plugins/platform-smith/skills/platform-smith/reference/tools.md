@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-255 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+272 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -39,7 +39,7 @@
 | `get_detected_secrets` | read | `project_uuid` | List secrets detected in a project's agent definitions (references/metadata only — never decrypted values). |
 | `get_scoped_agent_definition_file` | read | `agent_definition_uuid`, `file_uuid` | Get one file body of an agent definition AT ANY SCOPE (company, workspace or project) by file_uuid (from list_agent_definition_files). |
 | `list_agent_definition_files` | read | `agent_definition_uuid` | List an agent definition's files. |
-| `list_agent_definition_versions` | read | `agent_definition_uuid` | List a agent definition's saved versions, newest first: [{version, change (saved \| restored \| applied \| copied \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_user_uuid}]. |
+| `list_agent_definition_versions` | read | `agent_definition_uuid` | List a agent definition's saved versions, newest first: [{version, change (created \| saved \| restored \| applied \| copied \| imported \| duplicated \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_use… |
 | `list_agent_definitions` | read | `project_uuid` | List agent definitions in a project. |
 | `list_scoped_agent_definitions` | read | `scope` | List agent definitions at the given scope (scope=project\|workspace\|company). |
 | `publish_agent_definition` | write | `agent_definition_uuid` | Publish a agent definition's CURRENT version: mark it as released to its copies. |
@@ -125,6 +125,12 @@
 |---|---|---|---|
 | `list_available_sandbox_profiles` | read | `scope`, `scope_id` | List the sandbox profiles a launch can choose (scope=project\|workspace, scope_id=that container's UUID). |
 
+## batch
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `write_agent_definition_files` | **destructive** | `agent_definition_uuid` | Write many files of one agent definition at once: body {upsert:[{file_path, content, concept?, link_target?, is_executable?}], delete:[file_path], base_version?}. |
+
 ## branch-usage
 
 | Tool | Effect | Required args | Purpose |
@@ -136,6 +142,14 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `list_project_branches` | read | `project_uuid` | List the remote branches of the repository this project is linked to. |
+
+## bundle
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `export_agent_definition_bundle` | read | `agent_definition_uuid` | Export a agent definition as a portable bundle: {manifest, files:[{path, content, executable?}]}. |
+| `export_playbook_bundle` | read | `playbook_uuid` | Export a playbook as a portable bundle: {manifest, files:[{path, content, executable?}]}. |
+| `export_sandbox_profile_bundle` | read | `sandbox_profile_uuid` | Export a sandbox profile as a portable bundle: {manifest, files:[{path, content, executable?}]}. |
 
 ## cancel
 
@@ -214,6 +228,12 @@
 | `get_dockerfile_generation` | read | `generation_uuid`, `project_uuid` | Get ONE Dockerfile generation by its generation_uuid (from list_dockerfile_generations) — the answer to "was the Dockerfile validated, and where is the PR?". |
 | `list_dockerfile_generations` | read | `project_uuid` | List a project's Dockerfile generations, newest first, each with its verdict (running \| succeeded \| partial \| failed \| cancelled) and a one-line summary — start here when asked whether a project's PlatformSmith Dockerfile was created a… |
 
+## duplicate
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `duplicate_agent_definition` | write | `agent_definition_uuid` | Duplicate an agent definition as a STANDALONE agent: body {company:true \| workspace_uuid \| project_uuid, name?}. |
+
 ## environments
 
 | Tool | Effect | Required args | Purpose |
@@ -242,6 +262,17 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `get_harness_catalog` | read | — | List the coding-agent harnesses this deployment serves, with each one's identifier and the credential auth types it accepts. |
+
+## import
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `apply_agent_definition_import` | **destructive** | `agent_definition_uuid` | Apply a planned import into an existing agent definition. |
+| `apply_playbook_import` | **destructive** | `playbook_uuid` | Apply a planned import into an existing playbook. |
+| `apply_sandbox_profile_import` | **destructive** | `sandbox_profile_uuid` | Apply a planned import into an existing sandbox profile. |
+| `import_agent_definition_as_new` | write | — | Create a new agent definition from a planned bundle. |
+| `import_playbook_as_new` | write | — | Create a new playbook from a planned bundle. |
+| `import_sandbox_profile_as_new` | write | — | Create a new sandbox profile from a planned bundle. |
 
 ## integrations
 
@@ -295,6 +326,17 @@
 |---|---|---|---|
 | `get_my_permissions` | read | — | List the permissions the calling identity actually holds. |
 
+## plan
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `plan_agent_definition_import` | write | `agent_definition_uuid` | Plan importing a bundle INTO an existing agent definition (a dry run). |
+| `plan_agent_definition_import_as_new` | write | — | Plan importing a bundle as a NEW agent definition (a dry run). |
+| `plan_playbook_import` | write | `playbook_uuid` | Plan importing a bundle INTO an existing playbook (a dry run). |
+| `plan_playbook_import_as_new` | write | — | Plan importing a bundle as a NEW playbook (a dry run). |
+| `plan_sandbox_profile_import` | write | `sandbox_profile_uuid` | Plan importing a bundle INTO an existing sandbox profile (a dry run). |
+| `plan_sandbox_profile_import_as_new` | write | — | Plan importing a bundle as a NEW sandbox profile (a dry run). |
+
 ## platformsmith-attempts
 
 | Tool | Effect | Required args | Purpose |
@@ -327,7 +369,7 @@
 | `get_playbook_version` | read | `playbook_uuid`, `version` | Get one version of a playbook with its content: the version row plus items[] of {key, kind, path?, content?, link_target?, is_executable?, fields?}. |
 | `list_company_playbooks` | read | — | List the organization-level playbooks only (workspace_uuid null) — the ones that run in every workspace. |
 | `list_playbook_runs` | read | `playbook_uuid` | List the runs of one playbook — the history for that playbook. |
-| `list_playbook_versions` | read | `playbook_uuid` | List a playbook's saved versions, newest first: [{version, change (saved \| restored \| applied \| copied \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_user_uuid}]. |
+| `list_playbook_versions` | read | `playbook_uuid` | List a playbook's saved versions, newest first: [{version, change (created \| saved \| restored \| applied \| copied \| imported \| duplicated \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_user_uuid}]. |
 | `list_workspace_playbooks` | read | `workspace_uuid` | List the playbooks available in a workspace: its own plus the organization's (a row with workspace_uuid null is organization-level). |
 | `publish_playbook` | write | `playbook_uuid` | Publish a playbook's CURRENT version: mark it as released to its copies. |
 | `restore_playbook_version` | write | `playbook_uuid`, `version` | Restore an earlier version of a playbook: its content becomes the current content as a NEW version (change=restored). |
@@ -385,7 +427,7 @@
 | `get_sandbox_profile` | read | `sandbox_profile_uuid` | Get one sandbox profile, including its script and its secret_refs (names and env var names only — never values), its version, and the copy fields: parent ({uuid, name, scope_type, is_archived} or null — the profile it was cloned from… |
 | `get_sandbox_profile_update` | read | `sandbox_profile_uuid` | Read the update a COPY can take from its parent: {base_version (the parent version this copy last took), theirs_version (the parent's newest PUBLISHED version), edited (whether this copy changed since), items:[{key, kind, status, base, t… |
 | `get_sandbox_profile_version` | read | `sandbox_profile_uuid`, `version` | Get one version of a sandbox profile with its content: the version row plus items[] of {key, kind, path?, content?, link_target?, is_executable?, fields?}. |
-| `list_sandbox_profile_versions` | read | `sandbox_profile_uuid` | List a sandbox profile's saved versions, newest first: [{version, change (saved \| restored \| applied \| copied \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_user_uuid}]. |
+| `list_sandbox_profile_versions` | read | `sandbox_profile_uuid` | List a sandbox profile's saved versions, newest first: [{version, change (created \| saved \| restored \| applied \| copied \| imported \| duplicated \| flattened), content_hash, created_at, created_by_user_uuid, published_at, published_by_user… |
 | `list_sandbox_profiles` | read | `scope` | List the sandbox profiles OWNED by one scope (scope=project\|workspace\|company; omit scope_id for company). |
 | `publish_sandbox_profile` | write | `sandbox_profile_uuid` | Publish a sandbox profile's CURRENT version: mark it as released to its copies. |
 | `restore_sandbox_profile` | **destructive** | `sandbox_profile_uuid` | Restore an archived sandbox profile. |

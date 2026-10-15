@@ -96,6 +96,41 @@ In version, compare and update results each item is `{key, kind, …}`: a file i
 profiles (including its projects'); organization-level ones need an organization admin. Anything
 else answers **403**; check `get_my_permissions`.
 
+## Export, import and bulk edits
+
+**Export** — `export_agent_definition_bundle` (and `export_sandbox_profile_bundle`, `export_playbook_bundle`)
+returns a portable bundle: `{manifest, files:[{path, content}]}`. The manifest (`ps-bundle.json`,
+`schema_version: 1`) carries the settings, each file's concept, link target and executable flag, and the
+secret refs **by name only**. A playbook bundle nests its bound agent under `agent/`. Exporting writes nothing.
+
+**Import is always plan, then apply:**
+
+1. `plan_agent_definition_import` (into an existing agent) or `plan_agent_definition_import_as_new` (with
+   exactly one of `company: true`, `workspace_uuid`, `project_uuid`; `name` to rename). Send the bundle as
+   `bundle: {manifest?, files:[{path, content, executable?, link_target?}]}` — exactly what an export returns —
+   or a base64 zip in `bundle_zip`. Without a manifest the files are read as an agent's files at their paths
+   (a raw `.claude` folder works). Into an existing agent, `mode: "merge"` (default) keeps the files the bundle
+   does not mention; `mode: "replace"` removes them and the plan lists each one.
+2. **Show the person the plan.** It writes nothing and returns every path's `action` (add, update,
+   unchanged, remove, refused), `refused` (fix the bundle and plan again), `secrets_detected` (literal keys,
+   by path and line — replace them with `{{secret:NAME}}` placeholders rather than acknowledging them) and
+   `review` (hooks, permissions, MCP servers, Codex `config.toml`, executables, the tools file).
+3. `apply_agent_definition_import` / `import_agent_definition_as_new` with the **same** bundle and options,
+   `plan_hash` from the plan, and `acknowledge` with the `requires_acknowledgement` values the person agreed
+   to. A changed target since the plan is a 409 — plan again. One import is **one version**
+   (`change: imported`); restore the version before it to undo.
+
+Credential and history files (`.credentials.json`, `history.jsonl`, `.env`, `.ssh/`, `.git/`, private
+keys, session transcripts) are never imported — a bundle holding one is refused whole. Files are text only.
+
+**Bulk edits** — `write_agent_definition_files` takes `{upsert:[{file_path, content, …}], delete:[…],
+base_version?}` and writes them all as **one version**; rules are checked against the resulting file set,
+so a link and its target can arrive together. Prefer it to many single-file calls.
+
+**Duplicate vs copy** — `duplicate_agent_definition` makes a **standalone** agent (no parent, never offered
+updates) anywhere you may create agents, including the same workspace under a new name or the
+organization. Use `copy_agent_definition` when the new agent should keep taking the source's updates.
+
 ### Recipe: an organization-level agent that conducts a playbook
 
 1. `create_scoped_agent_definition` with `scope: "company"` (no `scope_id`), e.g.
