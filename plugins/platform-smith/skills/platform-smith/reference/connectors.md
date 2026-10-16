@@ -84,9 +84,9 @@ one**, and show them `preview_session_tools` first where it applies.
 - `set_environment_connector_override`, `clear_environment_connector_override` — make an
   environment use a specific account (for example a read-only bot account in production).
 - `create_custom_connector`, `update_custom_connector`, `delete_custom_connector`,
-  `discover_connector_tools`, `update_connector_tool` — the organisation's own servers and the
-  descriptor editor (above). Discovery and the editor change what agents may send to a server the
-  platform has not reviewed; say so when proposing them.
+  `discover_connector_tools`, `update_connector_tool` — the organisation's own servers, aggregators
+  and the descriptor editor (below). Discovery and the editor change what agents may send to a server
+  the platform has not reviewed; say so when proposing them.
 
 ## Custom connectors and the descriptor editor
 
@@ -110,6 +110,35 @@ cannot invent an input the server does not have. Refusals name the field (`inval
 
 Connecting an account to a custom connector is still done by a person in the UI (a pasted key, or a
 sign-in that may ask for the organisation's own OAuth app when the server offers no self-registration).
+
+## Aggregators
+
+An **aggregator** (category aggregator; Composio is the first) is one vendor fronting many apps —
+GitHub, Slack, Gmail, Notion, … — through the **organisation's own** account at that vendor. It is a
+catalog connector like any other, with three differences `list_connectors` surfaces:
+
+- **Custody.** The custody field says where the sign-in tokens of the apps live: "vendor vault" (the
+  vendor's own store, in the region given) or "customer KMS" (the key stays in the organisation's
+  cloud). The vendor is the organisation's processor, not PlatformSmith's sub-processor; an org admin
+  accepts a versioned custody notice (the acknowledgement version on the row) when connecting the
+  account. Connecting is done by a person in the UI (a server id, a user id and the vendor's API key)
+  — **not a tool**.
+- **Discovery.** The discovery flag is true: the entry curates no tools. `discover_connector_tools`
+  reads them from the organisation's own aggregator server (the apps the admin configured there), one
+  descriptor per tool named after the connector, the app and the action in that order (for Composio
+  and GitHub: composio, github, create an issue), each with group = the app, **all switched off** until `review_connector_tool`. A
+  tool without annotations counts as a write. Lists can run to hundreds of tools: enable per app, and
+  expect approvals.
+- **Account bindings.** A tool parameter that must equal the account's own vendor-side identity is
+  pinned with `update_connector_tool` to the account's own vendor-side id (the bind source is the
+  account's external id) or to a non-secret setting the admin filled at connect (the bind source is
+  the account's config followed by the setting's name, such as Composio's user id); the gateway fills it per call from the account the session acts
+  through.
+
+A call to an app the user has not connected inside the aggregator is refused to the agent as
+"connect required" with **no link**; the vendor's authorization link goes to the workspace's admins
+through the notification plane. Per-call vendor pricing is attributable from the audit row (connector
++ account). A self-hosted aggregator reachable from the platform is simply a custom connector.
 
 ## Not a tool
 
