@@ -13,7 +13,7 @@ bodies** — the actual agent config that lands in the runtime.
 | Field | Meaning |
 |---|---|
 | `concept` | One of: instructions, settings, skills, commands, mcp_servers, hooks, permissions, sandbox, agents, rules, output_styles, plugins |
-| `file_path` | Where it lands in the runtime, relative to the working directory: the instructions file is `CLAUDE.md` at the root (not `.claude/CLAUDE.md`); skills go under `.claude/skills/<name>/SKILL.md` |
+| `file_path` | Where it lands in the runtime, relative to the working directory: the instructions file is `CLAUDE.md` (Claude Code) or `AGENTS.md` (Codex) at the root (not `.claude/CLAUDE.md`); skills go under `<root><name>/SKILL.md`, root `.claude/skills/` (Claude Code) or `.agents/skills/` / `.codex/skills/` (Codex). `~/` puts a file in the home folder (`~/.codex/config.toml`) |
 | `content` | The file's text (empty for a link) |
 | `link_target` | Optional. Makes the row a **link** to another path in the same definition — see *Links* below |
 | `is_executable` | Optional. `true` writes the file with mode `0750` instead of `0640` (scripts, hooks) |
@@ -34,6 +34,25 @@ The target must exist, must not itself be a link or sit inside a linked folder, 
 root (both relative to the working directory, or both under `~/`). `tools.json`, the settings files and
 `.mcp.json` cannot be links. Deleting or renaming a file that a link points at is refused, naming the
 link. The sandbox gets a relative symlink.
+
+### Two harnesses, one agent
+
+An agent can carry the files of both harnesses, so switching `coding_agent_type` needs no reinstall:
+
+| | Claude Code | Codex |
+|---|---|---|
+| Instructions | `CLAUDE.md` | `AGENTS.md` (or a link to `CLAUDE.md`) |
+| Skills | `.claude/skills/<name>/` | `.agents/skills/<name>/` or `.codex/skills/<name>/` |
+| MCP servers | `.mcp.json` | `~/.codex/config.toml`, `[mcp_servers.<name>]` tables |
+
+Keep each skill once and put a **folder link** at the other harness's root. A harness sees only the skills
+under its own roots, so **binding a playbook** (or switching a bound agent's `coding_agent_type`) is refused
+while a skill that declares `watch_files` is invisible to the agent's harness; the error names the folder
+link to add.
+
+`~/.codex/config.toml` must be valid TOML and may not define the `platform-smith` server: the platform adds
+its own server next to yours, as it does for `.mcp.json`. It cannot be a link, and it may not set `projects`,
+`profile` or `profiles` (another config layer the platform's server could not override).
 
 Secrets: attach **refs**, never values (`add_agent_definition_secret_ref`); check they resolve with
 `get_agent_definition_secret_refs_status`.
