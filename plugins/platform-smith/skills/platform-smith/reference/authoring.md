@@ -1,6 +1,7 @@
 # Authoring: agent definitions, workflows, playbooks, sandbox profiles
 
-Three authorable surfaces. They differ in one way that matters a great deal: **workflows have a
+Four authorable surfaces — agent definitions, workflows, playbooks and sandbox profiles. Workflows and
+playbooks differ in one way that matters a great deal: **workflows have a
 draft lifecycle and playbooks do not.**
 
 ## Agent definitions
@@ -54,6 +55,13 @@ link to add.
 its own server next to yours, as it does for `.mcp.json`. It cannot be a link, and it may not set `projects`,
 `profile` or `profiles` (another config layer the platform's server could not override).
 
+**Where model calls go is reserved.** No definition file may set the model endpoint, the credential, a command that
+produces it, a proxy or certificate, or a telemetry destination: for example `ANTHROPIC_BASE_URL` / `HTTPS_PROXY`
+under `env`, `apiKeyHelper`, or Codex `model_provider`, `model_providers` and `otel`. Nor may a secret ref be injected
+as one of those names. A save naming one is refused for every caller, admins included, and the refusal is final, so
+do not retry or rename the key. To route through a gateway, a company admin sets it on the shared coding-agent
+connection (it applies to runtimes launched afterwards).
+
 Secrets: attach **refs**, never values (`add_agent_definition_secret_ref`); check they resolve with
 `get_agent_definition_secret_refs_status`.
 
@@ -70,6 +78,16 @@ An agent definition, playbook or sandbox profile at a workspace or project is **
 A copy records its **parent** (the item it was copied from, one level out) and the parent version it last
 took. Every read carries `version`, `parent`, `parent_revision`, `edited`, `update_available`,
 `detached_at`, `copies_read_only` and `read_only`.
+
+**Two kinds of parent.** `parent.kind` is `"entity"` — `{uuid, name, scope_type, is_archived}`, the item it
+was copied from — or `"library"` — `{code, name, version, is_archived}`, a **PlatformSmith Library** item. Every
+organization's core playbooks (PlatformSmith Work Item, PlatformSmith Knowledge Base) and default agents
+(Default, Default (Codex), Platform Playbooks, PlatformSmith Knowledge Base) are Library copies. For a Library
+parent, `version` is the Library version this deployment ships and `parent_revision` the one the copy last
+took; when a deployment ships a newer one the copy shows `update_available` and an organization admin
+reviews and applies it exactly as below. Nothing updates on its own; `detach_*` stops updates; publish and
+apply-to-copies are for parents you own. `is_archived: true` on a Library parent means the item is no
+longer shipped: the copy keeps working and no update is offered.
 
 **Make a copy**: `copy_agent_definition` (into a workspace or a project), `copy_playbook` (organization →
 workspace; playbooks have no project scope), or `clone_sandbox_profile`.
@@ -115,12 +133,137 @@ In version, compare and update results each item is `{key, kind, …}`: a file i
 profiles (including its projects'); organization-level ones need an organization admin. Anything
 else answers **403**; check `get_my_permissions`.
 
+## Install from the Library
+
+The Library is the catalogue of ready-made PlatformSmith agents, playbooks and workflows. Installing one gives your
+organization an **ordinary, editable copy** — look here before authoring an agent or playbook from scratch.
+Connectors are not Library items; they are connected under Integrations.
+
+1. **Browse** — `list_library_items`, optionally with `q` (words over name, summary, guidance and tags),
+   `kind` (`agent_definition` | `playbook` | `workflow`), `category` and `harness`. Each item says when to use it
+   (`guidance`), which harnesses it supports, which integrations it `needs`, where it can be installed
+   (`scopes`) and `installed_at` — your organization's own copies of it, with `update_available` when the
+   Library has shipped a newer version.
+2. **Look at one** — `get_library_item` with the item's `code`: its files, an instructions preview, the
+   secret refs it declares (names only) and, for a playbook, the agent that comes with it.
+3. **Plan** — `plan_library_install` with `{kind, workspace_uuid?, project_uuid?, harness?}` — `kind` is the
+   item's kind as the list shows it; always send it (a mismatch is `kind_mismatch`). No uuid means the
+   **organization** (organization admins only); `workspace_uuid` installs into that workspace; `project_uuid`
+   installs an agent into a project (playbooks have no project scope). It writes nothing and returns what
+   would be created or reused (a playbook brings its agent), any `conflicts` (a name already used, the item
+   already installed there), the resolved `harness`, the **readiness**, and a `plan_hash`. Installing needs the
+   right to add agent definitions — and, for a playbook, playbooks — at the target; a custom role missing one
+   gets a 403.
+   An item whose `action` is `blocked` is named by a conflict (its `uuid` is the existing row) and
+   `can_install` is false: tell the person why and do not install.
+4. **Show the person** the plan and the readiness before anything is created: what will be created or
+   reused and where, which harness, any conflict, and every readiness item that is `missing` with its fix.
+5. **Install** — `install_library_item` with the same kind, target and harness plus the plan's `plan_hash`. It is
+   all-or-nothing. A changed target or listing since the plan is a 409 (`plan_stale`) — plan again and show it
+   again. The body is `{kind, workspace_uuid?, project_uuid?, harness?, mode?, plan_hash}` (`kind` and `plan_hash`
+   required, the rest the SAME as the plan); there is no company argument.
+6. **Act on readiness** — an install goes ahead even when the item is not ready, and the result repeats the
+   readiness. Tell the person each missing piece: a coding-agent credential for the harness, a secret the
+   agent declares (add it as a secret — never paste a value into a file), or an integration the item needs
+   (connect it under Integrations). Readiness is a snapshot: "ready" is not a promise the credential works.
+
+**Harness.** An agent runs under Claude Code or Codex. Pass `harness` to choose; omit it for the item's
+default (a playbook that reuses an agent copy already there keeps that copy's harness). If the item does not
+support the harness you asked for, the refusal (422) names the harnesses it does support — offer one of those.
+The files install either way, so switching later needs no reinstall.
+
+**Updates.** An installed copy records the Library item as its parent. When the Library ships a newer
+version the copy shows `update_available`; review and apply it on the copy with the usual update tools
+(see Copies, history and updates above) — an unedited copy takes it whole.
+
+## Library workflows (use as-is or fork)
+
+Use a playbook when an agent should work the task out in a conversation. Use a workflow when the steps are
+fixed and should run the same way every time.
+
+A Library workflow (`kind: workflow`) installs the same way — plan, show the person, install — with three
+differences:
+
+- **Mode.** Pass `mode` to plan and install: `use_as_is` (the default) makes a **read-only** copy that takes
+  each Library update whole; `fork` makes an editable copy whose updates you compare and apply by hand.
+  Workflows can't be customised in place: to edit a use-as-is copy, ask the person and call
+  `fork_workflow_definition` — a fork can't go back to use-as-is. `mode` is part of the `plan_hash`.
+- **What it needs.** The item's `needs` names the agents it uses (installed or reused with it), the step
+  types (task types) its steps use, the hosts its steps connect to, and the secrets it declares (names only).
+  A step type this deployment does not have is a blocking readiness item: "Uses a step type that isn't
+  available here: <type>. This workflow can't be installed." A name already used at the target is a
+  `name_taken` conflict.
+- **Suggested triggers.** Installed off. You turn each one on. Installing at a workspace or project creates
+  each suggested trigger as an automation with `enabled: false` (origin `library:<code>@<version>`);
+  installing at the organization creates none — set one up later in a workspace, also off. Nothing turns one
+  on for the person — not install, not applying an update. When they ask, go through what it would start and
+  switch it on with `enable_automation` (in the app, a person turns it on in Automations).
+
+The agents are installed first, then the workflow copy. If the second step fails
+(`workflow_service_unavailable`, `error.details.completed: ["dependencies"]`) the agents are kept: plan again
+and install again — they are reused. Updates to a Library workflow copy are read with
+`get_workflow_definition_update` and applied with `apply_workflow_definition_update` (Workflow copies,
+history and updates below).
+
+## Your org: publish, copy, update
+
+Your organization has its own library of agents, playbooks and sandbox profiles, and its items reach
+workspaces and projects by **copy**. The order matters:
+
+1. **Browse your organization's items** — `list_org_library_items`, then `get_org_library_item` for one.
+   (This is your own organization's library, not the PlatformSmith Library above.)
+2. **Publish first.** `publish_agent_definition`, `publish_playbook` or `publish_sandbox_profile`. A copy
+   takes the newest **published** version, so copying an item that was never published is refused with
+   **409 `not_published`** — publish it, then copy again.
+3. **Copy.** `copy_agent_definition` (to a workspace or a project), `copy_playbook` (organization →
+   workspace) or `clone_sandbox_profile`. The copy is complete and editable; the original keeps changing
+   independently.
+4. **Update, per file.** When the original publishes something newer the copy shows `update_available`.
+   `get_agent_definition_update` (or `get_playbook_update`, `get_sandbox_profile_update`) lists each item;
+   show the person, then `apply_*_update`. An edited copy needs `"take"` or `"keep"` for every item both
+   sides changed — decided file by file, so a copy can take the parent's version of one file and keep its
+   own of another.
+5. **Make copies update-only (optional, ask first).** `set_agent_definition_copies_read_only`,
+   `set_playbook_copies_read_only` or `set_sandbox_profile_copies_read_only`. A read-only copy refuses
+   **every** setting edit — rename, description, coding agent type, the mandatory flag, a playbook's
+   agent binding, a profile's default — not just file edits, with **409 `read_only_copy`** naming the
+   parent. Applying an update, deleting and archiving stay allowed. Tell the person which copy is locked
+   and by whom; do not retry the edit. A copy of an **archived** parent reads `read_only: false` and is
+   editable again.
+6. **See where an item went.** `list_agent_definition_copies`, `list_playbook_copies` and
+   `list_sandbox_profile_copies` answer "who has copied this?". They show **linked** copies only —
+   detached copies are excluded, as are archived ones. They are for organization admins (the same right
+   that applies updates to copies): a caller without it is **refused**, and a uuid that is not yours reads
+   as not found.
+
+Refusals carry a machine reason in `detail` and structured context in `details` (for example the
+blocking playbooks or runs). Branch on `detail` and show `details` to the person.
+
+Removing things: `delete_agent_definition` is refused with **409 `bound_to_playbooks`** while a live
+playbook binds the agent — unbind it with `update_playbook` (set `agent_definition_uuid` to null) or
+remove the playbook first. Removing a playbook is in `running-work.md` (Removing a playbook).
+
+### Your org's workflows
+
+A company-level workflow with at least one published version is one of your organization's items:
+`list_org_library_items` (`kind=workflow`, also listed unfiltered) and `get_org_library_item` with
+`kind: workflow` (its published versions and the agents its steps use). Copy one into a workspace or project
+with `clone_workflow_definition`, body `{target_workspace_uuid | target_project_uuid, mode?}` — exactly one
+target; `mode` defaults to `fork` here (`use_as_is` for a read-only copy that takes updates whole). The copy
+starts from the newest **published** version (`not_published` when there is none). The agents it uses are
+your organization's own and are not copied: `warnings` names any the target cannot see. Publishing a newer
+version (`publish_workflow_definition`) offers it to every copy. If the list carries
+`unavailable_kinds: ["workflow"]`, workflows can't be shown right now — try again in a moment; it does not
+mean there are none.
+
 ## Export, import and bulk edits
 
 **Export** — `export_agent_definition_bundle` (and `export_sandbox_profile_bundle`, `export_playbook_bundle`)
 returns a portable bundle: `{manifest, files:[{path, content}]}`. The manifest (`ps-bundle.json`,
 `schema_version: 1`) carries the settings, each file's concept, link target and executable flag, and the
-secret refs **by name only**. A playbook bundle nests its bound agent under `agent/`. Exporting writes nothing.
+secret refs **by name only**. A playbook bundle nests its bound agent under `agent/`. Components from your organization travel by
+`org_component_uuid` (`source: org`, `library_code: null`, plus `detached: true` when the source was unpublished);
+PlatformSmith ones travel by `library_code`. Exporting writes nothing.
 
 **Import is always plan, then apply:**
 
@@ -137,7 +280,12 @@ secret refs **by name only**. A playbook bundle nests its bound agent under `age
 3. `apply_agent_definition_import` / `import_agent_definition_as_new` with the **same** bundle and options,
    `plan_hash` from the plan, and `acknowledge` with the `requires_acknowledgement` values the person agreed
    to. A changed target since the plan is a 409 — plan again. One import is **one version**
-   (`change: imported`); restore the version before it to undo.
+   (`change: imported`); restore the version before it to undo. Importing re-links an organization component
+   **only** by its uuid inside the same organization (published, visible to the agent, that version present);
+   otherwise it is imported **detached** with the warning `component_listing_unknown` ("names an org component
+   that is not available here" — identical for unknown and foreign ones). Show the person that warning. An
+   entry with both `library_code` and `org_component_uuid` is `component_invalid`. Restoring or copying a
+   version whose organization source no longer resolves also yields a detached component, never an error.
 
 Credential and history files (`.credentials.json`, `history.jsonl`, `.env`, `.ssh/`, `.git/`, private
 keys, session transcripts) are never imported — a bundle holding one is refused whole. Files are text only.
@@ -150,16 +298,53 @@ so a link and its target can arrive together. Prefer it to many single-file call
 updates) anywhere you may create agents, including the same workspace under a new name or the
 organization. Use `copy_agent_definition` when the new agent should keep taking the source's updates.
 
-### Recipe: an organization-level agent that conducts a playbook
+### Build an org agent end to end
+
+An organization-level agent that conducts a playbook, from nothing to a finished run. Writes need an
+organization admin (403 otherwise). Example names are invented; use the person's own.
 
 1. `create_scoped_agent_definition` with `scope: "company"` (no `scope_id`), e.g.
-   `{name, coding_agent_type: "claude_code"}`.
+   `{name: "release-notes-agent", coding_agent_type: "claude_code"}`.
 2. `create_scoped_agent_definition_file` for `CLAUDE.md` (`concept: instructions`) and any skills.
    Fix one with `update_scoped_agent_definition_file`, remove one with
-   `delete_scoped_agent_definition_file`; `list_agent_definition_files` shows the set.
-3. `create_playbook` **without** `workspace_uuid` (organization-level) and with
-   `agent_definition_uuid` set to the agent from step 1 — or bind later with `update_playbook`.
-4. `start_playbook_run` with the `workspace_uuid` to run in, then follow `get_playbook_run`.
+   `delete_scoped_agent_definition_file`; `list_agent_definition_files` confirms the set before you go on. To read
+   ONE file back use `get_scoped_agent_definition_file` (`agent_definition_uuid`, `file_uuid`) —
+   `get_agent_definition_file` demands a `project_uuid` and does not serve an organization agent.
+3. `create_playbook` **without** `workspace_uuid` (organization-level) and with `agent_definition_uuid` set to
+   the agent from step 1 — or create it first and bind later with `update_playbook`
+   (`agent_definition_uuid`; null unbinds). A playbook with no agent cannot run.
+4. `start_playbook_run` with body `{"playbook_uuid": "…", "workspace_uuid": "…"}` (the workspace to run in), then follow `get_playbook_run` until it is
+   terminal. Read `failure_reason` on a failed run; do not poll faster than the person needs.
+5. If the run is refused with `playbook_archived`, the playbook was removed: tell the person, do not retry.
+   If removing something is refused with `active_runs`, show `error.details.runs` and ask before
+   `cancel_playbook_run`.
+
+### Write a workflow from scratch
+
+1. `get_workflow_task_catalog` for the live node menu; it outranks any list written here.
+2. Draft `conductor_json` and call `validate_workflow_definition` (with `execution_context`) until `ok` is true.
+3. Read "The plumbing validation does NOT check" below and check each item by hand; validation passing is not
+   the same as the workflow working.
+4. For an **organization (company) workflow** `create_scoped_workflow_definition` with `scope: "company"` (no
+   `scope_id`); `create_workflow_definition` is project-only and demands `project_uuid`. Set
+   `execution_context` now, then `publish_workflow_definition`.
+5. `run_workflow_in_workspace`, then `get_workflow_execution` for the run and its steps;
+   `list_workflow_executions` finds earlier runs. Ask the person before a run that acts on their systems.
+
+The full rules (human gates, secrets, stopping a stuck run) are in "Workflow definitions — validate,
+publish, run" below; this recipe only fixes the order.
+
+### Publish to Your org
+
+1. `publish_agent_definition`, `publish_playbook`, `publish_sandbox_profile` or `publish_workflow_definition`.
+   Copies take the newest **published** version; an unpublished item is refused `not_published`.
+2. Confirm it is visible: `list_org_library_items` (add `q` for a name, or `kind` for a kind) and
+   `get_org_library_item`.
+3. Copy it where it is needed: `copy_agent_definition`, `copy_playbook`, `clone_sandbox_profile` or
+   `clone_workflow_definition` (body `{target_workspace_uuid | target_project_uuid, mode?}`).
+4. When you publish something newer the copies show `update_available`; take it per file as described in
+   "Your org: publish, copy, update". Components are published and attached by the steps in "Your org's
+   components".
 
 ## Workflow definitions — validate, publish, run
 
@@ -169,11 +354,11 @@ organization. Use `copy_agent_definition` when the new agent should keep taking 
 3. **`validate_workflow_definition`** before creating — structural problems surface as
    `{ok, errors[]}` instead of a bare 422 at publish. It also accepts `execution_context` and
    returns a `warnings[]` array (never blocking) when it's missing — see step 4.
-4. `create_workflow_definition` → `publish_workflow_definition` → `run_workflow`. **Set
+4. `create_workflow_definition` (project) or `create_scoped_workflow_definition` (company) → `publish_workflow_definition` → `run_workflow`. **Set
    `execution_context` (`"workspace"` or `"project"`) at CREATE time** — both create tools accept
    it — rather than discovering it's required only when publish 422s after the graph is already
-   persisted. Use **`run_workflow_in_workspace`** when the definition is company-scoped: it owns
-   no workspace and must be told which one to run in.
+   persisted. A run always needs a workspace: use **`run_workflow_in_workspace`**, which always
+   carries one (`run_workflow` is refused with 422 when none resolves).
 5. Human gates: an `await-signal` node with `_ps.shape:"approval"` parks and surfaces in
    `list_notifications` (as a row with `response_spec: "approval"`); decide it with
    `create_workflow_approval` using `approved` / `rejected` — **past tense, exactly those two
@@ -232,8 +417,8 @@ the usual reason a graph that validated cleanly still dies:
 - **Tenant context is not inherited.** Every worker node must reference it explicitly:
   `company_uuid: ${workflow.input._ps.company_uuid}` (likewise `workspace_uuid`, `user_uuid`). A task
   whose `_ps` lacks `company_uuid` fails with `_ps missing or invalid company_uuid`.
-- Supply the workspace at **run** time: `run_workflow` with input `{_ps:{workspace_uuid:"…"}}`.
-  `company_uuid` and `user_uuid` are added for you.
+- A run always needs a workspace: start it with `run_workflow_in_workspace`, which always carries
+  one. `company_uuid` and `user_uuid` are added for you.
 - A **`FORK_JOIN_DYNAMIC` must be immediately followed by a `JOIN`**, or the run fails.
 - **Dynamically-forked tasks are not covered by publish-time tenant injection** — publishing stamps
   `_ps.company_uuid` into tasks it can *see*, and a dynamic fork's sub-tasks are born at run time.
@@ -243,6 +428,25 @@ the usual reason a graph that validated cleanly still dies:
   project *data*, not a task array. Use `fork_tasks` + `fork_inputs`.
 - A fan-out over N repos where only k have work is **normal**: `git-open-pr` classifies "no commits
   between" as a SKIP with a reason, not an error.
+
+## Workflow copies, history and updates
+
+A workflow joins the copy model with the same tools as an agent or playbook
+(`list_workflow_definition_versions`, `compare_workflow_definition_versions`,
+`restore_workflow_definition_version`, `get_workflow_definition_update`, `apply_workflow_definition_update`,
+`list_workflow_definition_copies`, `apply_workflow_definition_to_copies`,
+`set_workflow_definition_copies_read_only`, `detach_workflow_definition`) and two differences:
+
+- **No per-item merge.** Apply replaces the whole graph with the parent's version and keeps the copy's
+  settings (name, description, category, labels). On an edited fork, ask first: it replaces the fork's own
+  graph edits, and you can restore it from History. A use-as-is copy takes the update with no question.
+- **One Publish.** Restoring makes a new version from an old one. It isn't live until you publish it. The
+  same holds for Apply: the person publishes with `publish_workflow_definition` after review.
+
+`get_workflow_definition` shows `copy_mode` (`use_as_is` | `fork`), `read_only_reason` (`use_as_is` |
+`parent_locked`) and `update_available` (`{version}` or null). A parent's read-only lock beats Fork. Runs
+already started keep the version they started with. Branch on `error.detail` for every refusal
+(`reference/troubleshooting.md`).
 
 ## Playbooks — authorable, but LIVE ON WRITE
 
@@ -258,8 +462,8 @@ only an organization-level agent; a workspace playbook binds an organization age
 workspace (400 otherwise). `update_playbook` with `agent_definition_uuid: <uuid>` binds, `null` unbinds,
 omitted leaves it. `list_company_playbooks` lists the organization-level ones.
 
-⚠️ **The difference that will bite you**: playbooks have **no validate, no draft and no delete**.
-What you write is live immediately for every subsequent `start_playbook_run`, and nothing removes it.
+⚠️ **The difference that will bite you**: playbooks have **no validate and no draft**.
+What you write is live immediately for every subsequent `start_playbook_run`. (`delete_playbook` archives one that has no active runs.)
 Every save is recorded, so `restore_playbook_version` undoes a bad edit. (`publish_playbook` is not a
 draft gate: it only offers the current version to the playbook's copies.)
 
@@ -268,7 +472,7 @@ draft gate: it only offers the current version to the playbook's copies.)
 
 So:
 
-1. Name it deliberately — you cannot delete it later.
+1. Name it deliberately — it is live on write (`delete_playbook` archives it later, but only with no active runs).
 2. Write it right the first time; there is no validate step to catch you (history lets you go back).
 3. Run with `start_playbook_run`; follow with `get_playbook_run`; history via `list_playbook_runs` /
    `list_workspace_playbook_runs`.
@@ -320,3 +524,110 @@ Several tools take `scope` (`project` | `workspace` | `company`) plus `scope_id`
 `/company/…`, not a UUID route. Scoped tools: `create_secret`, the
 `list_`/`create_scoped_` definition tools, and `list_sandbox_profiles` / `create_sandbox_profile`
 (`list_available_sandbox_profiles` takes `project` or `workspace` only).
+
+## Components
+
+A **component** is a skill, MCP server, hook, subagent, rule, script or connector entry that is tracked as one
+unit inside ONE agent definition. Components are **attached**, never installed: browse them with
+`list_library_items` (`kind=component`, optionally `component_kind`), then:
+
+1. `plan_attach_agent_definition_component` (`library_code`) — a dry run. **Show the person** the plan: the
+   files and entries it adds, what it owns, what it executes and connects to, every clash, the secret
+   references (names only) and the readiness. `can_apply: false` means stop and say why.
+2. The person decides: each clash is `take` (the component's version) or `keep` (the agent's own); each
+   secret name is `reuse` or `cancel`; `executes` / `connects` are acknowledged only after they have read
+   them. Never fill these in for them.
+3. `attach_agent_definition_component` with body `{library_code | org_component_uuid (exactly one, as planned),
+   plan_hash, base_version, decisions?, secret_ref_decisions?, acknowledge?}` — `plan_hash` from the plan and
+   `base_version` the agent's current version (both are only learnable from a 400 otherwise).
+   One new version of the agent is recorded.
+
+Later: `list_agent_definition_components` shows `update_available`; `get_agent_definition_component_update`
+shows the offer, `compare_agent_definition_component_update` one item side by side, and
+`apply_agent_definition_component_update` applies it with the person's `take` / `keep` decisions.
+`apply_agent_definition_unedited_updates` applies everything nobody edited and lists what it skipped (`edited`, `invalid`, or `acknowledgement_required` when a
+component update adds a new executes/connects capability — apply that one by one with `acknowledge`). `base_version` is required.
+`detach_agent_definition_component` stops update checks and keeps all content; `remove_agent_definition_component`
+deletes the component's files, entries and its own secret references. Ask the person first for both.
+
+A `harness_not_supported` (422) refusal is final: name the harness and suggest another listing. A
+`plan_stale` or `stale_base_version` (409) means re-plan and show the person again.
+
+An `entry_owned` clash is fixed by removing or detaching the component that owns the entry, never by taking
+its key. Hooks and subagents are Claude Code only: for a Codex agent the plan says so and
+`harness_not_supported` is the answer. Reading a component's secret references shows names only; whether to
+reuse an existing secret or cancel is the person's call. The table in `reference/troubleshooting.md`
+("A component would not attach, update or remove") maps each refusal to its next step.
+
+### Your org's components
+
+Your organization can publish its **own** components, next to the PlatformSmith ones. They are attached
+the same way (plan, show, attach) but by `org_component_uuid` instead of `library_code`; give exactly one.
+
+- **Browse**: `list_org_library_items` with `kind=component` (optional `component_kind`; add `workspace_uuid`
+  and/or `project_uuid` to see what an agent there can see — with neither you get organization-wide
+  listings only). **Look**: `get_org_library_item` (`kind=component`) or `get_org_component`;
+  `get_org_component_version` reads one past version (an integer).
+- **What can this agent add?** `list_available_agent_definition_components` lists your organization's and
+  PlatformSmith components for the agent's coding agent (`source` is `org` or `platform`;
+  `hidden_for_harness` counts the ones left out). It is not `list_agent_definition_components`, which lists
+  what is already attached.
+- **Attach**: `plan_attach_agent_definition_component` with `org_component_uuid`. **Show the person**
+  "Published by <name> in <scope>" (no name means a former member) with the files, entries, what it runs
+  and connects to. PlatformSmith does not review components your organization publishes: only basic checks
+  run, and reviewing what a component runs and connects to is your organization's responsibility. Then
+  `attach_agent_definition_component` as above. `item_not_found` means the agent cannot see that
+  component; `org_component_unpublished` and a 409 `unpublished` are final. An organization plan carries
+  `source: "org"`, `org_component_uuid` and `publisher` with `library_code: null`; an attached component whose source
+  was unpublished reads detached (`detached_reason: source_unpublished`); one whose listing cannot be resolved here (another company, deleted, not visible) reads detached with `detached_reason: source_unavailable`. A detached organization row keeps `source: "org"` and its `code` (the listing code; `org_component_uuid` may be null), and its update offer, compare and apply
+  return 409 `component_detached`, and the bulk update skips it. An organization component otherwise updates
+  exactly like a PlatformSmith one (same offer, compare, take/keep decisions, apply).
+- **Author from an agent**: `draft_org_component_from_agent_definition` (body `{component_kind, name, code?,
+  paths?, entries? [{file_path, entry_key}], secret_refs?}`; writes nothing; send the files,
+  config entries and secret NAMES to include — at least one file or entry). Review the draft with the
+  person, then `create_org_component` with `dry_run: true` and fix every problem it lists (read each
+  `message` against its `path` / `entry_key`), show the person the final files, entries, what it
+  executes and connects to, **ask**, then create it for real with `from_agent`. `from_agent.base_version` is the
+  agent's version; leave tracking on to keep the agent following the component. To author from scratch,
+  call `create_org_component` without `from_agent`.
+- **Where it is published**: neither `workspace_uuid` nor `project_uuid` is organization-wide; one of them
+  is that workspace or project; both is a 400. Everyone in that scope can see it. Organization owners and
+  admins publish at organization level; workspace admins and editors publish in their workspace and its
+  projects.
+- **New version**: `publish_org_component_version` with `base_version` = the component's latest version
+  (from `get_org_component`), `dry_run` first. Versions never change; agents tracking it are offered the
+  update through the usual `get_agent_definition_component_update` flow.
+- **Unpublish**: `unpublish_org_component` with `confirm: true`, only after the person agrees. Agents using
+  it keep their files but stop getting updates (`detached_agents` lists them); it can no longer be added,
+  and there is no republish. Unpublishing needs the delete permission, so editors cannot do it.
+- **Rules**: the code is yours alone and reserved forever, even after unpublish (`code_exists` /
+  `code_reserved` mean pick another). A component holds secret **names** only, never a value. Size limits:
+  at most 100 files, 1 MiB per file, 2 MiB of content and 100 entries per version.
+
+## Suggest components for a goal
+
+When the person states a goal ("I want the agent to review pull requests"), search before you write anything.
+You do the ranking; the platform only filters.
+
+1. Say the goal in one sentence and pull out two or three plain words.
+2. `list_org_library_items` with `q=<words>` and `kind=component`, then `list_library_items` with `q=<words>`,
+   `kind=component` and optionally `component_kind`. Look at your organization's items first, then the Library.
+3. `q` is words: case-insensitive, every word must match, at most 200 characters. An empty result is
+   `items: []`, not an error; try fewer or different words before giving up.
+4. Read the summaries only. Pick at most three, and tell the person which and why.
+5. **Plan before attaching:** `plan_attach_agent_definition_component` and show the plan (see Components).
+   Attach only after the person approves.
+
+## Start from the Library
+
+To begin a new agent or playbook from a ready-made one rather than a blank file:
+
+1. `list_library_items` (`q`, `kind`) to browse, then `get_library_item` with the item's `code` for its files and guidance.
+2. `plan_library_install` with the target (`workspace_uuid` and/or `project_uuid`, or neither for the
+   organization). Show the person the plan and any blockers.
+3. `install_library_item` with the same target and harness the plan used.
+4. The install is an ordinary editable copy: `list_agent_definition_files` to see it, then edit with the scoped
+   file tools in "Build an org agent end to end".
+   A Library item's `CLAUDE.md` is a **link row** (`link_target` `AGENTS.md`) and refuses content with a 400:
+   edit `AGENTS.md`. An install cannot rename — the copy keeps the Library name; rename it afterwards with
+   `update_agent_definition` (a full PUT: send the whole body with the new `name`).

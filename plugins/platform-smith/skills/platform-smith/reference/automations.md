@@ -118,8 +118,9 @@ change the source or target; to stop unlinked authors' pull requests running at 
 Slack @mentions and `/smith` are stricter: they **never** fall back to the service principal.
 If the sender cannot act as themselves, nothing starts and the delivery log says why.
 
-When a person acts as themselves, their **own** coding-agent credential is used only if they
-have allowed it for automations; otherwise the workspace's shared credential is.
+Automated runs, including those acting as a person, always use the workspace's shared
+coding-agent credential (the default when there are several). A person's personal credential is
+used only for sessions that person launches themselves.
 
 ## Commands: `<prefix> <verb> [args]`
 
@@ -388,7 +389,6 @@ Events this automation does not listen for (`no_event_match`) are **hidden by de
 | `dropped` / `cel_filter` | a webhook filter expression said no | check the filter |
 | `suppressed` / `deduplicated` | a repeat of a Slack alert already handled | expected |
 | `failed` / `no_credential` | no usable coding-agent credential for whoever the run acts as | ask an admin to add a shared one |
-| `failed` / `person_credential_not_granted` | the run acted as a person whose own coding-agent credential is not allowed for automations | that person allows it in the app |
 | `failed` / `target_gone` | the target was deleted | point the automation at a live target |
 | `failed` / `principal_unavailable` | the workspace's service principal could not be resolved | ask an admin to check the workspace |
 | `failed` / `work_item_failed` | a record-only delivery could not link its work item | check `work_item` (type name, key) |

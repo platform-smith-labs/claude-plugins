@@ -66,8 +66,13 @@ privilege-escalation surface, so no tool here can do it.
 curl -s -X POST "$PS_API/api/v1/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","password":"…"}'        # -> {"token": "<jwt>"}
 
+# Creating a PAT needs a fresh re-auth, or it answers 403 reauth_required. Re-enter the password
+# for purpose create_pat (it sets a short-lived cookie; keep it with -c/-b):
+curl -s -c jar -X POST "$PS_API/api/v1/auth/reauth" -H "Authorization: Bearer <jwt>" \
+  -H 'Content-Type: application/json' -d '{"password":"…","purpose":"create_pat"}'
+
 # expires_at is OPTIONAL and absolute (RFC3339). Omit it for a token that never expires.
-curl -s -X POST "$PS_API/api/v1/user/pats" -H "Authorization: Bearer <jwt>" \
+curl -s -b jar -X POST "$PS_API/api/v1/user/pats" -H "Authorization: Bearer <jwt>" \
   -H 'Content-Type: application/json' \
   -d '{"name":"my-laptop","expires_at":"2026-12-13T00:00:00Z"}'   # -> {"token": "pat_…"}
 ```

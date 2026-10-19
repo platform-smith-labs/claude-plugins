@@ -76,6 +76,38 @@ automation's run will have a credential. `list_automation_runs` shows who each a
 acted as (`identity`, `acted_as`) and, when it fell back to the service principal, why
 (`identity_note`). See `automations.md`.
 
+### A run that fails at once
+
+`start_playbook_run` answers 201 with `status: "failed"` and a `failure_reason` when the playbook's agent is
+unbound, archived or missing — no session starts. `failed` is terminal and `failure_reason` is returned on
+every read of the run. Report the reason and the fix (bind an agent to the playbook, or reinstall it from
+the Library); do not poll it.
+
+A playbook that has been removed (see below) cannot be started: `start_playbook_run` is refused with
+**409 `playbook_archived`**, or answers **404** — treat both as "this playbook is gone" and reinstall it or
+pick another.
+
+### Removing a playbook
+
+`delete_playbook` removes (archives) a playbook — ask the person first. It is refused with **409 `active_runs`** while any of its
+runs is still active, and `details.runs` names them. Show the person those runs, then either wait for
+them or end them with `cancel_playbook_run` (below) and delete again. Runs already started from a copy of
+the playbook are separate and keep going; a copy whose original was removed shows `source_archived`, and
+copies of a removed original can be edited again.
+
+### Cancelling a run
+
+`cancel_playbook_run` stops one run (ask first). The answer says what happened to the sandbox:
+
+- `runtime_stopped: true` — the run had the sandbox to itself (`runtime_exclusive: true`), so it was stopped
+  too.
+- `runtime_stopped: false` — the sandbox is **shared** with other work and was left running on purpose.
+  Cancelling does not free it. If the person wants it released, ask, then call `stop_runtime` (every
+  session on that sandbox stops).
+- `runtime_stopped: false` with `runtime_stop_error` set — the run had the sandbox to itself but stopping it
+  failed (`forbidden`, `not_found` or `upstream_error`). Report the code; do not retry blindly.
+- A run that had already finished answers `transitioned: false` and nothing is stopped.
+
 ## 2. Follow the async part
 
 ```

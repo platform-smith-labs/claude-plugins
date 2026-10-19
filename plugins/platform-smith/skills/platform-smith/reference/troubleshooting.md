@@ -99,6 +99,16 @@ the session started** — `compare_agent_definition_versions` shows what. Files 
 substitution: a file marked `has_secret_placeholders` shows the placeholder, never the value. A session
 may have no snapshot (recording is best effort, and older sessions predate it).
 
+A session can have **several snapshots** (for example a resume or a restart). Both tools take an optional
+`snapshot` (a snapshot id from `snapshots[]`); leave it out for the latest. Each entry in `snapshots[]`
+carries a `spawn_reason`. The snapshot also records the `inputs` the session received and a `runtime`
+summary of what the sandbox reported; if `runtime_reported_at` is null the sandbox did not report. A
+`snapshot_failed` marker means recording failed for that spawn. Read `inputs/...` and `runtime/...` files
+with `get_session_snapshot_file` (its `source` is `definition`, `platform`, `endpoint`, `input` or
+`runtime`). Secret refs show `delivered`, `delivery` and `value_version`, never a value. A 404 means there
+is no such snapshot or recording failed. To see what changed between two snapshots (of one session or
+two), use `compare_session_snapshots` with both session and snapshot ids.
+
 A copy that "should have" picked up an organization change has not, unless someone applied it:
 `get_agent_definition_update` on the copy shows what is waiting. Only **published** versions count.
 
@@ -106,6 +116,46 @@ A copy that "should have" picked up an organization change has not, unless someo
 
 **`get_workflow_definition_secret_refs_status`** (and `list_workflow_definition_secret_refs`) — the
 workflow twin of the agent-definition check.
+
+## A component would not attach, update or remove
+
+Read `error.detail` (and `error.details`) and branch on it:
+
+| `detail` | Meaning and next step |
+|---|---|
+| `harness_not_supported` (422) | The component does not support this agent's coding agent. Final: do not retry. Name the harness and offer another listing. |
+| `entry_owned` | Another component owns that entry. Detach or remove the other component; do not take its key. |
+| `unsupported_layout` | The agent's files do not have the shape the component expects. Tell the person; do not force it. |
+| `decisions_required` / `acknowledgement_required` | The person must decide each clash and acknowledge what it executes or connects to. Ask; never fill these in. |
+| `plan_stale` / `stale_base_version` | The agent or component changed after the plan. Plan again and show it again. |
+| `components_not_read` | Changing the coding agent would affect components not yet read. `details.components` lists them; ask the person, then repeat with `confirm_unread_components`. |
+| `not_installable` | A component is attached, not installed: use `plan_attach_agent_definition_component`. |
+| `source_ambiguous` / `source_required` | Attach and plan take exactly one of `library_code` or `org_component_uuid`. Send one (`source_required` = neither sent, `source_ambiguous` = both sent). |
+| `item_not_found` | The component does not exist or this agent cannot see it (outside its scope). Check `list_available_agent_definition_components`. |
+| `unpublished` (409) | Attach or plan found a component your organization has since unpublished. Final: pick another. |
+| `org_component_unpublished` | Your organization unpublished it. Final: it cannot be added or published to again. |
+| `invalid_component` (400) | Publishing checks failed. `error.details.problems` lists each one with a `message` and the `path` or `entry_key`; show them all, fix, and repeat with `dry_run: true`. Unknown rules are still problems. |
+| `code_reserved` / `code_exists` (409) | The code belongs to PlatformSmith, or your organization already used it (even unpublished). Choose another code. |
+| `stale_base_version` (409) | Someone published, or the agent changed, since you read it. Re-read, show the person again, then repeat. |
+| `scope_ambiguous` / `scope_excludes_source` (400) | Send at most one of `workspace_uuid` / `project_uuid`; to keep tracking, publish where the source agent can see it. |
+| `empty_selection` (400) | A draft needs at least one file or entry. |
+| `confirm_required` (400) | `unpublish_org_component` needs `confirm: true` after the person agrees. |
+
+## A workflow copy or Library workflow install was refused
+
+Branch on the string code in `error.detail`, never on the numeric `error.code`; lists are in `error.details`.
+
+| `detail` | Meaning and next step |
+|---|---|
+| `read_only_copy` (409) | A use-as-is or parent-locked copy: its graph can't be edited or restored. Workflows can't be customised in place. Fork to edit (`fork_workflow_definition`, after asking) — unless `read_only_reason` is `parent_locked`, which only the parent's owner can lift. |
+| `not_published` (409) | The workflow you are copying has no published version. Ask its owner to publish first. |
+| `dependency_missing` (409) | The update needs agents not installed here (`error.details.needs_install`). Install them from the Library, then apply again. |
+| `task_type_unavailable` (422) | The workflow uses a step type that isn't available here (`error.details.task_types`). It can't be installed; do not retry. |
+| `already_installed` (409) | A copy of this Library workflow is already at the target. Use that copy. |
+| `workflow_service_unavailable` (502/503) | The workflow service did not answer. After an install, `error.details.completed: ["dependencies"]` means the agents were kept: plan again and install again. |
+| `kind_mismatch` (400) | `kind` was missing or did not match the item. Send the item's `kind` exactly as the list shows it. |
+| `catalogue_unavailable` (502) | The Library could not be reached for an update. Try again later; the copy keeps working. |
+| `invalid_mode` (400) | `mode` must be `use_as_is` or `fork`. |
 
 ## A tool returned 403
 

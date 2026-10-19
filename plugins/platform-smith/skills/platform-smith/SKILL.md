@@ -1,6 +1,6 @@
 ---
 name: platform-smith
-description: Drive the PlatformSmith control plane over MCP (ps-mcp) — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, read results, author agent definitions, workflows and playbooks (and copy them, read their history, and apply their updates), set up automations (pull-request, tracker-comment, Slack, schedule and webhook triggers, comment commands, record-only work-item capture), govern which connector tools agent sessions may call (connectors, guardrails, the tool audit), and diagnose failures. Use whenever the ps-mcp MCP server is connected and the task involves PlatformSmith workspaces, projects, environments, runtimes, sessions, workflows, playbooks, automations, work items or artifacts.
+description: Drive the PlatformSmith control plane over MCP (ps-mcp) — orient in a tenant, launch runtimes and coding-agent sessions, follow them to completion, read results, author agent definitions, workflows and playbooks (and copy them, read their history, and apply their updates), install ready-made agents, playbooks and workflows from the Library, set up automations (pull-request, tracker-comment, Slack, schedule and webhook triggers, comment commands, record-only work-item capture), govern which connector tools agent sessions may call (connectors, guardrails, the tool audit), and diagnose failures. Use whenever the ps-mcp MCP server is connected and the task involves PlatformSmith workspaces, projects, environments, runtimes, sessions, workflows, playbooks, automations, work items or artifacts.
 ---
 
 # PlatformSmith over MCP
@@ -44,6 +44,20 @@ model loose on a customer's repository. Two checks come first:
 | Check whether a Dockerfile generation validated and find its pull request | `reference/running-work.md` §7 |
 | Author agent definitions, workflows, playbooks, sandbox profiles | `reference/authoring.md` |
 | Copy an agent, playbook or sandbox profile, read its history, or take its parent's update | `reference/authoring.md` (Copies, history and updates) |
+| Find a ready-made agent or playbook and install it into the organization, a workspace or a project | `reference/authoring.md` (Install from the Library) |
+| Install a Library workflow as-is or as a fork, or turn on its suggested triggers | `reference/authoring.md` (Library workflows (use as-is or fork)) |
+| Copy a workflow, read its history, fork a use-as-is copy, or apply its parent's update | `reference/authoring.md` (Workflow copies, history and updates) |
+| Copy one of your organization's workflows into a workspace or project | `reference/authoring.md` (Your org's workflows) |
+| Suggest components for a goal | `reference/authoring.md` (Suggest components for a goal) |
+| Start a new agent or playbook from a ready-made Library item | `reference/authoring.md` (Start from the Library) |
+| Build an organization agent that conducts a playbook, from nothing to a run | `reference/authoring.md` (Build an org agent end to end) |
+| Write a workflow from scratch | `reference/authoring.md` (Write a workflow from scratch) |
+| Publish an item to Your org and copy it out | `reference/authoring.md` (Publish to Your org) |
+| Add a skill, MCP server, hook, subagent, rule, script or connector to an agent, or update or remove one | `reference/authoring.md` (Components) |
+| Publish, version or unpublish your organization's own component, make one from an agent, or add one to an agent | `reference/authoring.md` (Your org's components) |
+| Publish an organization item, copy it to a workspace or project, update a copy file by file, lock copies read-only, or see who copied it | `reference/authoring.md` (Your org: publish, copy, update) |
+| Remove a playbook, or work out why `delete_playbook` is refused | `reference/running-work.md` (Removing a playbook) |
+| Cancel a playbook run and free its sandbox | `reference/running-work.md` (Cancelling a run) |
 | Export or import an agent, playbook or sandbox profile, edit many files at once, or duplicate an agent | `reference/authoring.md` (Export, import and bulk edits) |
 | See exactly what a session's agent received | `reference/troubleshooting.md` |
 | Make something run on its own — on a pull request, a comment command, a ticket, a Slack alert, a schedule or a webhook | `reference/automations.md` |
@@ -63,10 +77,13 @@ level at launch. A copy records its **parent**, and updates never arrive on thei
 **publishes** a version (only published versions count), the copy shows `update_available`, and a person
 reviews it with `get_agent_definition_update` and applies it with `apply_agent_definition_update` —
 deciding `take` or `keep` for every item both sides changed. One level at a time: a project copy follows
-its workspace copy. Every save is a version you can list, compare and restore. Agent files can be
+its workspace copy. A **workflow** copy is either **use-as-is** (read-only, takes each update whole) or a
+**fork** (editable, updates applied by hand); Apply replaces its whole graph and keeps its settings, and
+nothing — install or apply — ever turns on a suggested trigger. The organization's core playbooks and default agents are copies of **PlatformSmith Library** items (`parent.kind: "library"`): a newer Library version shows as `update_available` and is applied the same way — nothing updates on its own. A ready-made **component** attached to an agent keeps its own updates (`get_agent_definition_component_update`), separate from the copy's parent. Components can come from PlatformSmith or from your own organization (`org_component_uuid`). Every save is a version you can list, compare and restore. Agent files can be
 **links** (`link_target`, e.g. `CLAUDE.md` → `AGENTS.md`) or executable (`is_executable`). And
 `get_session_snapshot` is the record of what a session's agent actually received, stored before secret
-substitution. Details: `reference/authoring.md`.
+substitution. A session can have several snapshots: pass `snapshot` to pick one (default latest); `compare_session_snapshots` diffs two.
+Details: `reference/authoring.md`.
 
 ## Automations
 
@@ -130,8 +147,10 @@ the only account assigned).
 - `preview_session_tools` shows what a session would get, and why, before anything launches.
 - "Why can't my agent call X?" — `get_session_tools`, then `explain_tool_decision` on its audit row.
   The audit (`list_tool_audit`) is metadata only: never a call's arguments or result.
-- Enabling connectors, reviewing tools, guardrails and account assignment are **admin actions** —
-  ask the person first. Connecting an account is done in the UI under **Org → Connectors**.
+- Enabling connectors, reviewing tools, guardrails and environment overrides are **admin actions** —
+  ask the person first. Connector **setup** is done in the UI under **Org → Connectors**: connecting
+  an account, assigning it to workspaces, applying a catalog update, and adding, editing or deleting
+  a custom connector.
 
 Details: `reference/connectors.md`.
 
@@ -182,9 +201,10 @@ lag a deployment. So never answer a question about *this tenant* from the docs, 
   back** — there is no tool, and asking for one differently will not produce one.
 - **Administration is not exposed, deliberately.** No PAT or workspace-token minting, no RBAC, no
   user creation, no integration setup (connecting GitHub, Bitbucket, Slack, Jira or Linear,
-  Receives events, workspace assignment, linking people), no connecting or removing a connector
-  account, no changing the command prefix, no workspace/project/environment CRUD. (Connector
-  *governance* over accounts that already exist — guardrails, tool reviews, wiring — is exposed, as
+  Receives events, workspace assignment, linking people), no connector setup (connecting or removing
+  an account, assigning it to workspaces, applying a catalog update, adding/editing/deleting a custom
+  connector), no changing the command prefix, no workspace/project/environment CRUD. (Connector
+  *governance* over accounts that already exist — guardrails, tool reviews, environment overrides — is exposed, as
   admin actions; see above.) If you need one of
   these, **say exactly what is blocked and ask the human to do it in the UI** — that is more useful
   than a workaround, and there is no workaround.

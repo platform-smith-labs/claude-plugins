@@ -67,38 +67,33 @@ workspace; workspace admins see their own.
 ## Admin actions
 
 Every write tool here is an administrative action, and the platform enforces who may make it:
-organisation admins for connectors, tool reviews and account assignment; workspace admins for
-guardrails and environment overrides inside their own workspaces. **Ask the person before calling
+organisation admins for connectors and tool reviews; workspace admins for guardrails and
+environment overrides inside their own workspaces. **Ask the person before calling
 one**, and show them `preview_session_tools` first where it applies.
 
-- `enable_connector`, `apply_connector_update` — create or refresh the organisation's copy of a
-  catalog connector. New tools arrive **unreviewed**, so neither grants anything by itself.
+- `enable_connector` — create the organisation's copy of a catalog connector. Its tools arrive
+  **unreviewed**, so enabling grants nothing by itself.
 - `review_connector_tool` — the organisation-wide switch for one tool, and its effect class (equal
   to the catalog's or stricter). Turning a write tool on lets agents change things in the vendor's
   system.
 - `create_guardrail`, `update_guardrail`, `delete_guardrail` — guardrails are versioned; every
   change is a new revision (`list_guardrail_revisions`). Updating or deleting one can **loosen** a
   restriction for every session it reached.
-- `assign_connector_account` — **replaces** an account's whole assignment list (which workspaces it
-  serves, its label, whether it is a workspace's default). Read `list_connector_accounts` first.
 - `set_environment_connector_override`, `clear_environment_connector_override` — make an
   environment use a specific account (for example a read-only bot account in production).
-- `create_custom_connector`, `update_custom_connector`, `delete_custom_connector`,
-  `discover_connector_tools`, `update_connector_tool` — the organisation's own servers, aggregators
+- `discover_connector_tools`, `update_connector_tool` — the organisation's own servers, aggregators
   and the descriptor editor (below). Discovery and the editor change what agents may send to a server
   the platform has not reviewed; say so when proposing them.
 
 ## Custom connectors and the descriptor editor
 
 A **custom connector** is any MCP server the organisation runs, added by an org admin by its address
-(`create_custom_connector`: code, name, server_url, auth as `none` / `static` / `oauth_*`). PlatformSmith
+in the PlatformSmith UI (Org → Connectors), which is also where it is edited or deleted. PlatformSmith
 has not reviewed its tools: `discover_connector_tools` reads them from the server through one of its
 accounts and makes one descriptor per tool (effect from the server's annotations, every input
 agent-supplied, each **unreviewed** until `review_connector_tool`). Re-running discovery keeps the
 organisation's edits for tools that still exist, retires tools the server dropped, and adds new ones
-switched off. `list_custom_connectors` lists them; `update_custom_connector` edits the definition (the
-sign-in method only while no account exists); `delete_custom_connector` is refused while accounts
-remain.
+switched off. `list_custom_connectors` lists them.
 
 The **descriptor editor** is `get_connector_tool` + `update_connector_tool`: read the tool (its
 `version` is the save's `base_version`), then save a new version with the description, effect, every

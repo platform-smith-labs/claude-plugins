@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-272 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+306 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -66,6 +66,12 @@
 | `list_tool_audit` | read | — | The tool-call audit, newest first, as {items:[…], next_before}: one row per agent tool call — session, workspace, environment, tool, connector_code, effect, the account and identity_mode it acted through, decision (e.g. |
 | `preview_session_tools` | write | — | Preview — writing nothing — which tools a session would get if launched now in a workspace (optionally a project and environment) with a given tools file, and why. |
 
+## apply-unedited
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `apply_agent_definition_unedited_updates` | write | `agent_definition_uuid` | Apply every pending update that touches nothing the person edited — the agent's own base and its components — as ONE new version. |
+
 ## artifact-versions
 
 | Tool | Effect | Required args | Purpose |
@@ -123,6 +129,7 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
+| `list_available_agent_definition_components` | read | `agent_definition_uuid` | What this agent definition could ADD: your organization's components visible to it and PlatformSmith Library components, for its harness (unlike list_agent_definition_components, which lists what is already attached). |
 | `list_available_sandbox_profiles` | read | `scope`, `scope_id` | List the sandbox profiles a launch can choose (scope=project\|workspace, scope_id=that container's UUID). |
 
 ## batch
@@ -156,6 +163,7 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `cancel_dockerfile_generation` | **destructive** | `generation_uuid`, `project_uuid` | Cancel a RUNNING Dockerfile generation: it stops, its verdict becomes `cancelled` naming the stage it was in, and the updated generation is returned. |
+| `cancel_playbook_run` | **destructive** | `playbook_run_uuid` | Cancel a playbook run. |
 | `cancel_session_turn` | **destructive** | `name`, `turn_id` | Cancel ONE in-flight turn of a session, leaving the session alive and able to take the next prompt. |
 
 ## command-prefix
@@ -164,6 +172,18 @@
 |---|---|---|---|
 | `get_company_command_prefix` | read | — | Read the organisation's COMMAND PREFIX, as {prefix, effective}: the first word people type to give an automation a command in a pull-request, issue or ticket comment — `<prefix> <verb> [args]`, such as `/ps review security` (the defaul… |
 | `get_workspace_command_prefix` | read | `workspace_uuid` | Read a workspace's COMMAND PREFIX, as {prefix, effective}: `effective` is what people type in this workspace to give an automation a command (`<prefix> <verb> [args]` in a pull-request, issue or ticket comment — the verb is an automati… |
+
+## components
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `apply_agent_definition_component_update` | write | `agent_definition_uuid`, `component_uuid` | Update one attached component to a newer Library version, as ONE new version of the agent. |
+| `attach_agent_definition_component` | write | `agent_definition_uuid` | Attach a Library component to an agent definition as ONE new version of the agent. |
+| `compare_agent_definition_component_update` | read | `agent_definition_uuid`, `component_uuid` | Show one item of a component update side by side. |
+| `detach_agent_definition_component` | **destructive** | `agent_definition_uuid`, `component_uuid` | Stop tracking a component: it stops getting update checks for good (there is no re-attach) but EVERYTHING stays — its files, entries and secret refs. |
+| `get_agent_definition_component_update` | read | `agent_definition_uuid`, `component_uuid` | What would change if this component were updated to the newest Library version. |
+| `list_agent_definition_components` | read | `agent_definition_uuid` | List the components attached to an agent definition (skills, MCP servers, hooks, subagents, rules, scripts, connectors). |
+| `remove_agent_definition_component` | **destructive** | `agent_definition_uuid`, `component_uuid` | Remove a component and DELETE its files, its entries and the secret refs only it added; one new version, restorable with restore_agent_definition_version. |
 
 ## connections
 
@@ -176,11 +196,7 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
-| `apply_connector_update` | write | `connector` | ADMIN ACTION (organisation admins): bring this organisation's copy of a connector up to the newer catalog version (list_connectors shows update_available). |
-| `assign_connector_account` | **destructive** | `account_uuid` | ADMIN ACTION (organisation admins): REPLACE which workspaces an existing connector account serves (account_uuid from list_connector_accounts), as assignments [{workspace_uuid (null = every workspace), label, is_default}]. |
 | `clear_environment_connector_override` | **destructive** | `connector`, `environment_uuid` | ADMIN ACTION: remove an environment's account override for a connector; sessions there fall back to the workspace's default account, or the only account assigned to it. |
-| `create_custom_connector` | write | — | ADMIN ACTION (organisation admins): add a custom connector — body {code, name, summary?, server_url, auth}. |
-| `delete_custom_connector` | **destructive** | `connector` | ADMIN ACTION (organisation admins): delete a custom connector. |
 | `disable_connector` | write | `connector` | ADMIN ACTION (organisation admins; others get 403): switch a connector off for this organisation. |
 | `discover_connector_tools` | write | `connector` | ADMIN ACTION (organisation admins): read a connector's tools from its server — a CUSTOM connector, or a catalog connector that discovers its tools (an aggregator such as Composio; a curated catalog connector answers 409 not_discoverabl… |
 | `enable_connector` | write | `connector` | ADMIN ACTION (organisation admins; others get 403): enable a catalog connector for this organisation by creating its organisation copy. |
@@ -188,11 +204,10 @@
 | `list_connector_accounts` | read | `connector` | List one connector's connected accounts (connector = its code, e.g. |
 | `list_connector_tools` | read | `connector` | List one connector's tools (connector = its code; `platform` for the platform's own agent tools), as {tools:[…]}: exposed_as (the name an agent calls), description, effect (read \| write \| destructive; catalog_effect is the catalog's ow… |
 | `list_connectors` | read | — | List the connectors this organisation can use, as {connectors:[…]}: every catalog entry (code, name, summary, category, preview, verified_on, catalog_version) with this organisation's copy of it — enabled, update_available (a newer c… |
-| `list_custom_connectors` | read | — | List the organisation's CUSTOM connectors, as {connectors:[…]}: a custom connector is any MCP server an org admin added by its address (an internal tool server, a self-hosted gateway) — code, name, summary, server_url, auth (methods:… |
+| `list_custom_connectors` | read | — | List the organisation's CUSTOM connectors, as {connectors:[…]}: a custom connector is any MCP server an org admin added by its address in the PlatformSmith UI (an internal tool server, a self-hosted gateway) — code, name, summary, se… |
 | `review_connector_tool` | **destructive** | `connector`, `tool` | ADMIN ACTION (organisation admins): review one connector tool (tool = its exposed_as name) — the organisation-wide on/off switch and its effect class. |
 | `set_environment_connector_override` | write | `connector`, `environment_uuid` | ADMIN ACTION (workspace admins of the environment's workspace, or organisation admins): make every session in this environment act through this account for the connector, ahead of the workspace's default — e.g. |
 | `update_connector_tool` | write | `connector`, `tool` | ADMIN ACTION (organisation admins): the DESCRIPTOR EDITOR's save — body {base_version, description?, effect?, params?, binds_external_ref_provider?, result?, timeout_secs?}. |
-| `update_custom_connector` | write | `connector` | ADMIN ACTION (organisation admins): edit a custom connector's name, summary, server_url or auth (send the whole definition minus code). |
 
 ## controllers
 
@@ -215,6 +230,15 @@
 | `list_recent_conversations` | read | `workspace_uuid` | The workspace's most recent A2A conversations — the orientation view when you know something was discussed but not which conversation. |
 | `send_conversation_message` | write | `conversation_uuid`, `workspace_uuid` | Post a message into an A2A conversation. |
 
+## copies
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `list_agent_definition_copies` | read | `agent_definition_uuid` | List the linked copies of an agent definition. |
+| `list_playbook_copies` | read | `playbook_uuid` | List the linked copies of a playbook. |
+| `list_sandbox_profile_copies` | read | `sandbox_profile_uuid` | List the linked copies of a sandbox profile. |
+| `list_workflow_definition_copies` | read | `workflow_definition_uuid` | List the direct copies of a workflow definition in your organization: [{uuid, name, scope_type, workspace_uuid, project_uuid, parent_revision, published_version, edited, copy_mode (use_as_is \| fork), detached_at, read_only}]. |
+
 ## default
 
 | Tool | Effect | Required args | Purpose |
@@ -228,6 +252,12 @@
 | `get_dockerfile_generation` | read | `generation_uuid`, `project_uuid` | Get ONE Dockerfile generation by its generation_uuid (from list_dockerfile_generations) — the answer to "was the Dockerfile validated, and where is the PR?". |
 | `list_dockerfile_generations` | read | `project_uuid` | List a project's Dockerfile generations, newest first, each with its verdict (running \| succeeded \| partial \| failed \| cancelled) and a one-line summary — start here when asked whether a project's PlatformSmith Dockerfile was created a… |
 
+## draft
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `draft_org_component_from_agent_definition` | write | `agent_definition_uuid` | Turn a selection of an agent definition's files, config entries and secret refs into a DRAFT component body — writes nothing. |
+
 ## duplicate
 
 | Tool | Effect | Required args | Purpose |
@@ -240,6 +270,12 @@
 |---|---|---|---|
 | `get_environment` | read | `environment_uuid` | Get a single environment by UUID (read-only). |
 | `list_environments` | read | `workspace_uuid` | List environments in a workspace (read-only). |
+
+## fork
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `fork_workflow_definition` | write | `workflow_definition_uuid` | Turn a use-as-is workflow COPY into a fork, so its graph can be edited. |
 
 ## git-link
 
@@ -274,6 +310,12 @@
 | `import_playbook_as_new` | write | — | Create a new playbook from a planned bundle. |
 | `import_sandbox_profile_as_new` | write | — | Create a new sandbox profile from a planned bundle. |
 
+## install
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `install_library_item` | write | `code` | Install a Library item as ordinary copies, in ONE transaction (all or nothing; a workflow differs — see below). |
+
 ## integrations
 
 | Tool | Effect | Required args | Purpose |
@@ -292,6 +334,13 @@
 |---|---|---|---|
 | `list_type_scheme_item_types` | read | `type_scheme_uuid` | List one type scheme's item types and its containment grammar — which type may be a child of which. |
 | `list_workspace_item_types` | read | `workspace_uuid` | List the work-item types this workspace may use, which is the authoritative source for create_work_item's item_type_name — that argument defaults to "Parent Work", and a deployment whose scheme does not define that name will refuse the… |
+
+## items
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_library_item` | read | `code` | One Library item in full: everything list_library_items returns plus its description, the agent's file list (path, size, link target, executable), a preview of its instructions (AGENTS.md / CLAUDE.md, truncated), a playbook's conductor i… |
+| `list_library_items` | read | — | Browse the Library: the PlatformSmith agents, playbooks and workflows you can install. |
 
 ## launch
 
@@ -320,6 +369,22 @@
 | `get_notification` | read | `notification_uuid` | Get one notification by UUID: its question, options, state, and — once settled — who answered, how, and whether the answer reached the agent (delivery). |
 | `list_notifications` | read | `workspace_uuid` | List a workspace's notifications — what agents, playbook runs and workflow runs are asking or telling people: questions, approval gates (response_spec=approval), escalations, updates. |
 
+## org-components
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `create_org_component` | write | — | Publish a NEW component for your organization (version 1). |
+| `get_org_component` | read | `org_component_uuid` | One of your organization's components in full: the listing (uuid, code, component_kind, name, title, summary, scope_type, scope_name, workspace_uuid, project_uuid, harnesses, latest_version, publisher {kind, name (null = a former member)… |
+| `get_org_component_version` | read | `org_component_uuid`, `version` | One published version of an organization component: its body (files with content, links, entries, secret_refs (names only), executes, connects, notes) plus version and publisher. |
+| `publish_org_component_version` | write | `org_component_uuid` | Publish the next version of one of your organization's components. |
+
+## org-items
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `get_org_library_item` | read | `kind`, `uuid` | One of your organization's own published items in full: everything list_org_library_items returns plus its files (paths only) and its published versions. |
+| `list_org_library_items` | read | — | List your organization's OWN published items — agent definitions, playbooks, sandbox profiles and workflows an organization admin has published for the rest of the organization to copy (NOT the PlatformSmith Library; that is list_libra… |
+
 ## permissions
 
 | Tool | Effect | Required args | Purpose |
@@ -332,6 +397,8 @@
 |---|---|---|---|
 | `plan_agent_definition_import` | write | `agent_definition_uuid` | Plan importing a bundle INTO an existing agent definition (a dry run). |
 | `plan_agent_definition_import_as_new` | write | — | Plan importing a bundle as a NEW agent definition (a dry run). |
+| `plan_attach_agent_definition_component` | write | `agent_definition_uuid` | Plan adding a Library component (kind=component in list_library_items) to an agent definition — a dry run that writes nothing. |
+| `plan_library_install` | write | `code` | Plan installing a Library item (a dry run — writes nothing). |
 | `plan_playbook_import` | write | `playbook_uuid` | Plan importing a bundle INTO an existing playbook (a dry run). |
 | `plan_playbook_import_as_new` | write | — | Plan importing a bundle as a NEW playbook (a dry run). |
 | `plan_sandbox_profile_import` | write | `sandbox_profile_uuid` | Plan importing a bundle INTO an existing sandbox profile (a dry run). |
@@ -363,8 +430,9 @@
 | `compare_playbook_versions` | read | `base`, `head`, `playbook_uuid` | Compare two versions of one playbook, item by item. |
 | `copy_playbook` | write | `playbook_uuid` | Copy an organization-level playbook into a workspace (playbooks have no project scope). |
 | `create_playbook` | write | — | Create a playbook definition. |
+| `delete_playbook` | **destructive** | `playbook_uuid` | Archive (delete) a playbook; answers 204. |
 | `detach_playbook` | **destructive** | `playbook_uuid` | Detach a COPY from its parent: it keeps its current content but stops recording a parent and is never offered updates again (detached_at is set, so reads can say why no update shows). |
-| `get_playbook` | read | `playbook_uuid` | Get one playbook by UUID, with its version and the copy fields: parent ({uuid, name, scope_type, is_archived} or null — the organization playbook it was copied from), parent_revision, edited, update_available ({version} or null; get_pl… |
+| `get_playbook` | read | `playbook_uuid` | Get one playbook by UUID, with its version and the copy fields: parent ({kind:"entity", uuid, name, scope_type, is_archived} (the item it was copied from) or {kind:"library", code, name, version, is_archived} (a PlatformSmith Library ite… |
 | `get_playbook_update` | read | `playbook_uuid` | Read the update a COPY can take from its parent: {base_version (the parent version this copy last took), theirs_version (the parent's newest PUBLISHED version), edited (whether this copy changed since), items:[{key, kind, status, base, t… |
 | `get_playbook_version` | read | `playbook_uuid`, `version` | Get one version of a playbook with its content: the version row plus items[] of {key, kind, path?, content?, link_target?, is_executable?, fields?}. |
 | `list_company_playbooks` | read | — | List the organization-level playbooks only (workspace_uuid null) — the ones that run in every workspace. |
@@ -474,6 +542,7 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
+| `compare_session_snapshots` | read | `other_session_uuid`, `other_snapshot_uuid`, `session_uuid`, `snapshot_uuid` | Compare two session snapshots: base = (session_uuid, snapshot_uuid), head = (other_session_uuid, other_snapshot_uuid). |
 | `create_session` | **destructive** | — | Create a runtime session directly (the non-workflow path to a working session). |
 | `get_session` | read | `name` | Get a session by name. |
 | `get_session_events` | read | `name` | Cursor-poll a session's events. |
@@ -549,6 +618,12 @@
 |---|---|---|---|
 | `list_type_schemes` | read | — | List the work-item type schemes this company may use — the shipped system schemes plus any the company defined. |
 
+## unpublish
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `unpublish_org_component` | **destructive** | `org_component_uuid` | Unpublish one of your organization's components. |
+
 ## validation
 
 | Tool | Effect | Required args | Purpose |
@@ -581,14 +656,23 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
-| `clone_workflow_definition` | write | `workflow_definition_uuid` | Clone an existing workflow definition. |
+| `apply_workflow_definition_to_copies` | **destructive** | `workflow_definition_uuid` | On a PARENT: apply its newest PUBLISHED version to every direct copy that is behind and UNEDITED. |
+| `apply_workflow_definition_update` | write | `workflow_definition_uuid` | Apply the parent's update to this workflow COPY. |
+| `clone_workflow_definition` | write | `workflow_definition_uuid` | Copy a workflow definition into a workspace or project — the copy step for your organization's workflows (list_org_library_items kind=workflow) and for clone-to-override. |
+| `compare_workflow_definition_versions` | read | `base`, `head`, `workflow_definition_uuid` | Compare two versions of one workflow definition, item by item. |
 | `create_scoped_workflow_definition` | write | `scope` | Create a workflow definition at the given scope (scope=project\|workspace\|company, scope_id=that container's UUID; omit scope_id for scope=company — the company is taken from your identity). |
 | `create_workflow_definition` | write | `project_uuid` | Create a workflow definition in a project. |
 | `delete_workflow_definition` | **destructive** | `workflow_definition_uuid` | Delete a workflow definition. |
+| `detach_workflow_definition` | **destructive** | `workflow_definition_uuid` | Detach a COPY from its parent: it keeps its current content but stops recording a parent and is never offered updates again (detached_at is set, so reads can say why no update shows). |
 | `get_workflow_definition` | read | `workflow_definition_uuid` | Get a workflow definition by UUID. |
+| `get_workflow_definition_update` | read | `workflow_definition_uuid` | Read the update a COPY can take from its parent: {base_version (the parent version this copy last took), theirs_version (the parent's newest PUBLISHED version), edited (whether this copy changed since), items:[{key, kind, status, base, t… |
+| `get_workflow_definition_version` | read | `version`, `workflow_definition_uuid` | Get one version of a workflow definition with its content: the version row plus items[] of {key, kind, path?, content?, link_target?, is_executable?, fields?}. |
 | `list_scoped_workflow_definitions` | read | `scope` | List workflow definitions at the given scope (scope=project\|workspace\|company). |
+| `list_workflow_definition_versions` | read | `workflow_definition_uuid` | List a workflow definition's saved versions, newest first: [{version, change (created \| saved \| restored \| applied \| copied \| forked \| migrated), content_hash, created_at, created_by_user_uuid, published_at, published_by_user_uuid}]. |
 | `list_workflow_definitions` | read | `project_uuid` | List workflow definitions in a project. |
 | `publish_workflow_definition` | write | `workflow_definition_uuid` | Publish a workflow definition (draft → live). |
+| `restore_workflow_definition_version` | write | `version`, `workflow_definition_uuid` | Restore an earlier version of a workflow definition: its content becomes the current content as a NEW version (change=restored). |
+| `set_workflow_definition_copies_read_only` | write | `workflow_definition_uuid` | On a PARENT: set whether its copies are read-only. |
 | `update_workflow_definition` | write | `workflow_definition_uuid` | Replace a workflow definition (full PUT update). |
 | `validate_workflow_definition` | write | — | Validate a DRAFT conductor_json BEFORE create/publish (no persistence). |
 
