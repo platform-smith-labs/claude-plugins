@@ -20,7 +20,7 @@ credential or pick another definition — see the pre-flight in `running-work.md
 
 ## Runtime starts, but the coding agent cannot authenticate
 
-1. **`list_integration_connections`** — does a `claude_code` / `codex` credential exist, and is it
+1. **`list_integration_connections`** — does a `claude_code` / `codex_cli` credential exist, and is it
    enabled? `get_integration_connection` for one in detail.
 2. **`list_workspace_integrations`** — returns the `connections` and `accounts` **assigned to this
    workspace**. A credential that exists company-wide but is not assigned here will not resolve for
@@ -123,12 +123,14 @@ Read `error.detail` (and `error.details`) and branch on it:
 
 | `detail` | Meaning and next step |
 |---|---|
-| `harness_not_supported` (422) | The component does not support this agent's coding agent. Final: do not retry. Name the harness and offer another listing. |
+| `harness_not_supported` (422) | Library **install** only: the item does not support the requested coding agent. Final: do not retry. Name the harness and offer another listing. Attach never refuses on this: it succeeds with a `component_not_read` warning. |
 | `entry_owned` | Another component owns that entry. Detach or remove the other component; do not take its key. |
 | `unsupported_layout` | The agent's files do not have the shape the component expects. Tell the person; do not force it. |
 | `decisions_required` / `acknowledgement_required` | The person must decide each clash and acknowledge what it executes or connects to. Ask; never fill these in. |
 | `plan_stale` / `stale_base_version` | The agent or component changed after the plan. Plan again and show it again. |
-| `components_not_read` | Changing the coding agent would affect components not yet read. `details.components` lists them; ask the person, then repeat with `confirm_unread_components`. |
+| `component_not_read` (a **warning**, not an error) | The write succeeded, but a component's listing does not support the named `harness`, so that coding agent will not read it. Tell the person; detach the component or keep it. |
+| `skills_hidden_for_harness` (a **warning** on a save, a 422 at launch) | A playbook's skill is not visible to the harness; `path` is the skill folder. Add a folder link at that harness's skill root, or launch with a harness that sees it. |
+| `home_path_not_allowed` (400) | A `~/` file path outside `~/.claude/` and exactly `~/.codex/config.toml`. Final: use a workspace-relative path. |
 | `not_installable` | A component is attached, not installed: use `plan_attach_agent_definition_component`. |
 | `source_ambiguous` / `source_required` | Attach and plan take exactly one of `library_code` or `org_component_uuid`. Send one (`source_required` = neither sent, `source_ambiguous` = both sent). |
 | `item_not_found` | The component does not exist or this agent cannot see it (outside its scope). Check `list_available_agent_definition_components`. |

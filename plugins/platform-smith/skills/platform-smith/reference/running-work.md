@@ -5,13 +5,13 @@
 A human using the web launcher sees unusable options greyed out. **You have no such affordance, and
 this check is your equivalent of a disabled row.**
 
-Agent definitions may carry **`harness_credential_configured`** (boolean):
+Agent definitions may carry **`harness_credentials`**, a map of harness to boolean (for example `{"claude_code": true, "codex_cli": false}`), one entry per harness in the definition's `harnesses`:
 
 | Value | Meaning |
 |---|---|
-| `true` | Startable. |
-| `false` | The coding agent has **no usable credential**. The start is **not refused** — it succeeds, and the agent fails at its **first turn** (there is no fallback key). Do not offer it, do not pick it. |
-| **absent** | **UNKNOWN — not available.** Never read absence as "fine". |
+| `true` | Startable with that harness. |
+| `false` | That coding agent has **no usable credential**. The start is **not refused** — it succeeds, and the agent fails at its **first turn** (there is no fallback key). Do not offer or pick that harness. |
+| **absent** (map or key) | **UNKNOWN — not available.** Never read absence as "fine". |
 
 Absence is legitimate in exactly two cases, because availability is per-caller **and** per-workspace
 and these calls cannot answer honestly:
@@ -29,7 +29,25 @@ returns `[]` for a genuinely credentialed definition. Don't rely on it here.)
 That refusal is **correct behaviour, not a transient fault**. Branch on the machine-readable code in
 `error.detail`: `coding_agent_credential_unavailable` (the umbrella) or `credential_unusable`. **Do
 not branch on `error.code`** — it is the HTTP status repeated as an integer and discriminates
-nothing. **Do not retry.** Fix the credential or pick another definition.
+nothing. **Do not retry.** Fix the credential or pick another definition or harness.
+
+### Choosing the coding agent
+
+`launch`, `create_session` and `spawn_runtime` take an optional `coding_agent_type`. Omit it and the platform chooses: the definition's `default_harness`, then the company default, then the first harness in the definition's `harnesses` whose credential works. `start_playbook_run` takes it too, as a per-run override: run override, then the playbook's own pin, then its agent's `default_harness`. Conversation participants and automation routing rules can pin a harness the same way.
+
+A harness you pass, or a pin, is **never substituted** — it is refused `422`, and `error.detail` says why:
+
+| `error.detail` | Meaning |
+|---|---|
+| `harness_resume_mismatch` | You are resuming a session that ran a different harness. |
+| `harness_not_in_set` | The harness is not one of the definition's `harnesses`. |
+| `harness_not_in_mandatory_definition` | The organization's mandatory definition does not offer it. |
+| `coding_agent_credential_unresolved` | No usable credential for that harness; the detail names it. |
+| `harness_not_installed` | The sandbox image does not include that harness. |
+| `harness_not_registered` | Unknown harness id. |
+| `skills_hidden_for_harness` | The chosen harness cannot see a templated skill the run needs; the detail names it. Add a folder link for that harness or pick another. |
+
+Do not retry unchanged: pick a harness from the definition's `harnesses` whose `harness_credentials` entry is `true`.
 
 ## 1. Start
 
@@ -124,6 +142,9 @@ implementation downstream, so it is deliberately not exposed. Poll.
 
 - `send_session_input` — feed it a prompt or command.
 - `get_session` — its state. **This is also the completion probe.**
+  A session row can carry `harness_status: "unregistered"` (its coding agent is no longer in the catalog;
+  `null` on shell sessions). It still lists and reads, with no cancel; events, input and stop stay refused
+  `422 harness_not_registered`, so name the harness and do not retry.
 - `stop_session` — ends the session's **agent**; graceful by default, pass `force=true` only after a
   graceful stop has failed. ⚠️ It **does NOT release the sandbox**: the session stays `state=started`
   and the sandbox keeps running.

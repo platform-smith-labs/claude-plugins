@@ -27,9 +27,9 @@ produce a helpful error — it produces a 404 indistinguishable from a permissio
 Starting a runtime or a session costs real resources and, in the case of a coding agent, turns a
 model loose on a customer's repository. Two checks come first:
 
-1. **Is the agent definition startable?** Read `harness_credential_configured`. `false` means there
-   is **no usable credential** — the start is *not* refused, it succeeds and the agent fails at its
-   first turn. **ABSENT means UNKNOWN — not available.** See
+1. **Is the agent definition startable?** Read `harness_credentials` (a map of harness to boolean). `false` for a harness means there
+   is **no usable credential** for it — the start is *not* refused, it succeeds and the agent fails at its
+   first turn. **ABSENT (the map or a key) means UNKNOWN — not available.** Launch with a harness whose entry is `true`; `launch` and `create_session` take an optional `coding_agent_type` to choose one. See
    `reference/running-work.md`; this is the single most common way an agent wastes a turn here.
 2. **Is the target ready?** `get_readiness` for the workspace/environment/project, and
    `get_workspace_controllers_summary` — a disconnected controller looks exactly like a stuck launch.

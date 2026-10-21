@@ -136,7 +136,7 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
-| `write_agent_definition_files` | **destructive** | `agent_definition_uuid` | Write many files of one agent definition at once: body {upsert:[{file_path, content, concept?, link_target?, is_executable?}], delete:[file_path], base_version?}. |
+| `write_agent_definition_files` | **destructive** | `agent_definition_uuid` | Write many files of one agent definition at once: body {upsert:[{file_path, content, concept?, link_target?, is_executable?, acknowledge?}], delete:[file_path], base_version?}. |
 
 ## branch-usage
 
@@ -190,7 +190,7 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `get_integration_connection` | read | `connection_uuid` | Get one integration connection's metadata and status (read-only, never a decrypted value) — is it enabled, what auth_type does it carry, which accounts sit under it (each with receives_events, suspended and its workspace assignment), a… |
-| `list_integration_connections` | read | — | List the company's integration connections — every provider (GitHub, Bitbucket, Slack, Jira, Linear, the claude_code / codex credentials a runtime needs, model providers), each with its accounts (receives_events, suspended, workspace a… |
+| `list_integration_connections` | read | — | List the company's integration connections — every provider (GitHub, Bitbucket, Slack, Jira, Linear, the claude_code / codex_cli credentials a runtime needs, model providers), each with its accounts (receives_events, suspended, workspa… |
 
 ## connectors
 

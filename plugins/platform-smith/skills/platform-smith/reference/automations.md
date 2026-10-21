@@ -186,7 +186,7 @@ prompt or inputs, and may name a `project_uuid` for the item. Its deliveries sho
 1. Find the project and confirm its repository is linked: `list_projects`, then
    `get_project_git_link`. A repository source watches the project's linked repository.
 2. Pick the target. Either a playbook (`list_workspace_playbooks`) or a coding-agent session —
-   for a session, choose an agent definition whose `harness_credential_configured` is `true`
+   for a session, choose an agent definition and a harness whose `harness_credentials` entry is `true`
    and an environment (`list_environments`).
 3. Create it switched off:
 

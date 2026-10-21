@@ -13,11 +13,29 @@ bodies** — the actual agent config that lands in the runtime.
 
 | Field | Meaning |
 |---|---|
-| `concept` | One of: instructions, settings, skills, commands, mcp_servers, hooks, permissions, sandbox, agents, rules, output_styles, plugins |
-| `file_path` | Where it lands in the runtime, relative to the working directory: the instructions file is `CLAUDE.md` (Claude Code) or `AGENTS.md` (Codex) at the root (not `.claude/CLAUDE.md`); skills go under `<root><name>/SKILL.md`, root `.claude/skills/` (Claude Code) or `.agents/skills/` / `.codex/skills/` (Codex). `~/` puts a file in the home folder (`~/.codex/config.toml`) |
+| `concept` | One of: instructions, settings, skills, commands, mcp_servers, hooks, permissions, sandbox, agents, rules, output_styles, plugins, `file` (a path no other concept claims; kept as-is) |
+| `file_path` | Where it lands in the runtime, relative to the working directory: the instructions file is `CLAUDE.md` (Claude Code) or `AGENTS.md` (Codex) at the root (not `.claude/CLAUDE.md`); skills go under `<root><name>/SKILL.md`, root `.claude/skills/` (Claude Code) or `.agents/skills/` (Codex). `~/` puts a file in the home folder (`~/.codex/config.toml`) |
 | `content` | The file's text (empty for a link) |
 | `link_target` | Optional. Makes the row a **link** to another path in the same definition — see *Links* below |
 | `is_executable` | Optional. `true` writes the file with mode `0750` instead of `0640` (scripts, hooks) |
+
+**Files save as-is.** The platform hints; it does not refuse a file a harness merely ignores. Every write
+response carries `warnings`, always an array of `{code, path?, harness?, message}`: `concept_shape_mismatch`,
+`concept_path_mismatch`, `skill_manifest_invalid`, `component_not_read`, `skills_hidden_for_harness`,
+`harness_no_skills`, `component_harness_files` / `component_mcp_harnesses` / `component_claude_only`,
+`instructions_file_missing`, `playbook_unbound`, `mcp_entry_duplicate` and `warnings_truncated`. Show them to the
+person; none blocks the save. Every file object also carries `read_by`, the harness ids that auto-load it
+(link-aware; `[]` means no harness does, the file is still on disk in the workspace).
+
+What still refuses, because it is a security limit: a relative path with `..` or an empty segment, a path
+deeper than 64 segments or over 512 bytes, reserved `.platform-smith/` paths and platform skill folders, a `~/`
+path outside `~/.claude/` and exactly `~/.codex/config.toml` (400 `home_path_not_allowed`), credentials in
+content, the reserved `platform-smith` MCP server name and a Codex `config.toml` that does not parse.
+
+Two secret refusals differ: `path_denied` (400) means the path is never writable and has no override;
+`credential_detected` (400; names path, line and kind, never the text) can be waived for that one file with
+`acknowledge: ["secrets"]` (per upsert entry in a batch) - but only after the person confirms the text is not a
+secret. Ask them; never acknowledge on your own.
 
 **What a definition holds is exactly what runs.** Nothing is merged in from an organization or
 workspace definition at launch, so `list_agent_definition_files` is the file set the runtime gets.
@@ -38,18 +56,20 @@ link. The sandbox gets a relative symlink.
 
 ### Two harnesses, one agent
 
-An agent can carry the files of both harnesses, so switching `coding_agent_type` needs no reinstall:
+An agent can carry the files of both harnesses, so the definition runs on either with no reinstall. Its `harnesses` lists the ones it supports (non-empty; omit it on create and the platform suggests the set from the files) and `default_harness` (null or a member of `harnesses`) is the one that launches when the caller names none. Adding a harness later still saves; components it cannot read come back as `component_not_read` warnings (one per component and harness); a restored revision saved before harness sets existed is refused (`revision_predates_harness_set`):
 
 | | Claude Code | Codex |
 |---|---|---|
 | Instructions | `CLAUDE.md` | `AGENTS.md` (or a link to `CLAUDE.md`) |
-| Skills | `.claude/skills/<name>/` | `.agents/skills/<name>/` or `.codex/skills/<name>/` |
+| Skills | `.claude/skills/<name>/` | `.agents/skills/<name>/` |
 | MCP servers | `.mcp.json` | `~/.codex/config.toml`, `[mcp_servers.<name>]` tables |
 
 Keep each skill once and put a **folder link** at the other harness's root. A harness sees only the skills
-under its own roots, so **binding a playbook** (or switching a bound agent's `coding_agent_type`) is refused
-while a skill that declares `watch_files` is invisible to the agent's harness; the error names the folder
-link to add.
+under its own roots, so **binding a playbook** (or changing a bound agent's `default_harness` or `harnesses`) returns a
+`skills_hidden_for_harness` warning while a skill that declares `watch_files` is invisible to the agent's
+harness; the warning's `path` is the skill folder. To make it available to that harness, add a **folder link**
+at the harness's skill root pointing at that folder (a normal file write with `link_target`). Only a launch on a
+harness that cannot see the skill is refused.
 
 `~/.codex/config.toml` must be valid TOML and may not define the `platform-smith` server: the platform adds
 its own server next to yours, as it does for `.mcp.json`. It cannot be a link, and it may not set `projects`,
@@ -304,7 +324,7 @@ An organization-level agent that conducts a playbook, from nothing to a finished
 organization admin (403 otherwise). Example names are invented; use the person's own.
 
 1. `create_scoped_agent_definition` with `scope: "company"` (no `scope_id`), e.g.
-   `{name: "release-notes-agent", coding_agent_type: "claude_code"}`.
+   `{name: "release-notes-agent", harnesses: ["claude_code"], default_harness: "claude_code"}`.
 2. `create_scoped_agent_definition_file` for `CLAUDE.md` (`concept: instructions`) and any skills.
    Fix one with `update_scoped_agent_definition_file`, remove one with
    `delete_scoped_agent_definition_file`; `list_agent_definition_files` confirms the set before you go on. To read
@@ -550,12 +570,12 @@ component update adds a new executes/connects capability — apply that one by o
 `detach_agent_definition_component` stops update checks and keeps all content; `remove_agent_definition_component`
 deletes the component's files, entries and its own secret references. Ask the person first for both.
 
-A `harness_not_supported` (422) refusal is final: name the harness and suggest another listing. A
+Attaching a component whose listing does not support the agent's harness still succeeds: the files are injected as-is and a `component_not_read` warning names the harness. `harness_not_supported` (422) is now only the answer to a Library **install** of a harness the item does not support; it is final: name the harness and suggest another listing. A
 `plan_stale` or `stale_base_version` (409) means re-plan and show the person again.
 
 An `entry_owned` clash is fixed by removing or detaching the component that owns the entry, never by taking
 its key. Hooks and subagents are Claude Code only: for a Codex agent the plan says so and
-`harness_not_supported` is the answer. Reading a component's secret references shows names only; whether to
+the plan warns (`component_not_read`). Reading a component's secret references shows names only; whether to
 reuse an existing secret or cancel is the person's call. The table in `reference/troubleshooting.md`
 ("A component would not attach, update or remove") maps each refusal to its next step.
 
