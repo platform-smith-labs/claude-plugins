@@ -26,18 +26,18 @@ correctly. (`get_agent_definition_secret_refs_status` looks like the natural esc
 returns `[]` for a genuinely credentialed definition. Don't rely on it here.)
 
 ### If a start is refused
-That refusal is **correct behaviour, not a transient fault**. Branch on the machine-readable code in
-`error.detail`: `coding_agent_credential_unavailable` (the umbrella) or `credential_unusable`. **Do
-not branch on `error.code`** — it is the HTTP status repeated as an integer and discriminates
+That refusal is **correct behaviour, not a transient fault**. Branch on the machine-readable code — the
+last path segment of the error's `type`: `coding_agent_credential_unresolved` (no usable credential for the harness) or
+`credential_unusable`. **Do not branch on `status`** — it is only the HTTP status and discriminates
 nothing. **Do not retry.** Fix the credential or pick another definition or harness.
 
 ### Choosing the coding agent
 
 `launch`, `create_session` and `spawn_runtime` take an optional `coding_agent_type`. Omit it and the platform chooses: the definition's `default_harness`, then the company default, then the first harness in the definition's `harnesses` whose credential works. `start_playbook_run` takes it too, as a per-run override: run override, then the playbook's own pin, then its agent's `default_harness`. Conversation participants and automation routing rules can pin a harness the same way.
 
-A harness you pass, or a pin, is **never substituted** — it is refused `422`, and `error.detail` says why:
+A harness you pass, or a pin, is **never substituted** — it is refused `422`, and the code says why:
 
-| `error.detail` | Meaning |
+| Code | Meaning |
 |---|---|
 | `harness_resume_mismatch` | You are resuming a session that ran a different harness. |
 | `harness_not_in_set` | The harness is not one of the definition's `harnesses`. |

@@ -220,7 +220,7 @@ differences:
   switch it on with `enable_automation` (in the app, a person turns it on in Automations).
 
 The agents are installed first, then the workflow copy. If the second step fails
-(`workflow_service_unavailable`, `error.details.completed: ["dependencies"]`) the agents are kept: plan again
+(`workflow_service_unavailable`) any agents already installed are kept: plan again
 and install again — they are reused. Updates to a Library workflow copy are read with
 `get_workflow_definition_update` and applied with `apply_workflow_definition_update` (Workflow copies,
 history and updates below).
@@ -336,7 +336,7 @@ organization admin (403 otherwise). Example names are invented; use the person's
 4. `start_playbook_run` with body `{"playbook_uuid": "…", "workspace_uuid": "…"}` (the workspace to run in), then follow `get_playbook_run` until it is
    terminal. Read `failure_reason` on a failed run; do not poll faster than the person needs.
 5. If the run is refused with `playbook_archived`, the playbook was removed: tell the person, do not retry.
-   If removing something is refused with `active_runs`, show `error.details.runs` and ask before
+   If removing something is refused with `active_runs`, show the `runs` it lists and ask before
    `cancel_playbook_run`.
 
 ### Write a workflow from scratch
@@ -389,8 +389,8 @@ publish, run" below; this recipe only fixes the order.
 6. A run that will never finish (a stalled turn with no deadline reached, a fork branch that
    quota-refused with nothing downstream to notice) can be stopped with
    **`terminate_workflow_execution(execution_id, reason)`**. A live run stops. A run that has
-   already finished answers **409** with `error.detail` = `execution_already_terminal` and
-   `error.fields.status` giving its final status — treat that as "already finished", not a failure, and read
+   already finished answers **409** with the code `execution_already_terminal` and `run_status` giving its
+   final status — treat that as "already finished", not a failure, and read
    `get_workflow_execution` for the outcome. A missing run, or another company's, answers **404**.
    So it is safe to call on anything `list_workflow_executions` shows as suspiciously
    long-`RUNNING`, even if the run finishes first.
@@ -465,8 +465,8 @@ A workflow joins the copy model with the same tools as an agent or playbook
 
 `get_workflow_definition` shows `copy_mode` (`use_as_is` | `fork`), `read_only_reason` (`use_as_is` |
 `parent_locked`) and `update_available` (`{version}` or null). A parent's read-only lock beats Fork. Runs
-already started keep the version they started with. Branch on `error.detail` for every refusal
-(`reference/troubleshooting.md`).
+already started keep the version they started with. Branch on the code (the last path segment of the
+error's `type`) for every refusal (`reference/troubleshooting.md`).
 
 ## Playbooks — authorable, but LIVE ON WRITE
 

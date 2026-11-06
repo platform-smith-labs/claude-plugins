@@ -3,6 +3,27 @@
 Work down the list. Each step names the tool that answers it. **Do not retry a failed launch until
 one of them explains the failure** — a retried credential refusal fails identically.
 
+## How to read an error
+
+Every failed call returns one error object (RFC 9457 problem details), the same shape whether
+the failure came from the platform or from the MCP server itself:
+
+```json
+{"type": "https://docs.platformsmith.com/errors/active_runs", "title": "Active runs", "status": 409,
+ "detail": "…", "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "runs": […]}
+```
+
+- **Branch on the code** — the last path segment of `type` (`active_runs` above). The tables
+  below are keyed by it. `type` is also a link to that code's documentation.
+- `status` is the HTTP status; it says nothing a code does not. `detail` is written for people:
+  show it, never match on its wording. A server error (5xx) has no `detail`.
+- `errors` (when present) lists field problems, each with a `detail` and, for the request body,
+  a `pointer` such as `#/name`.
+- Members a code documents (`runs`, `needs_install`, `keys` …) sit beside these.
+- **`trace_id` identifies this one failure.** When something fails that the tables below do not
+  explain, give the person the `trace_id` to quote to PlatformSmith support — it is how support
+  finds exactly what happened, without either of you sharing the content of the request.
+
 ## Launch never starts / stays queued
 
 1. **`get_readiness`** — pass whichever of `workspace_uuid` / `environment_uuid` / `project_uuid` you
@@ -14,8 +35,8 @@ one of them explains the failure** — a retried credential refusal fails identi
 
 ## Start was refused for a missing coding-agent credential
 
-Correct behaviour, not a fault. Branch on `error.detail`
-(`coding_agent_credential_unavailable` / `credential_unusable`), **never** on `error.code`. Fix the
+Correct behaviour, not a fault. Branch on the code
+(`coding_agent_credential_unresolved` / `credential_unusable`), **never** on `status`. Fix the
 credential or pick another definition — see the pre-flight in `running-work.md`.
 
 ## Runtime starts, but the coding agent cannot authenticate
@@ -119,9 +140,9 @@ workflow twin of the agent-definition check.
 
 ## A component would not attach, update or remove
 
-Read `error.detail` (and `error.details`) and branch on it:
+Branch on the code (and read the members it names):
 
-| `detail` | Meaning and next step |
+| Code | Meaning and next step |
 |---|---|
 | `harness_not_supported` (422) | Library **install** only: the item does not support the requested coding agent. Final: do not retry. Name the harness and offer another listing. Attach never refuses on this: it succeeds with a `component_not_read` warning. |
 | `entry_owned` | Another component owns that entry. Detach or remove the other component; do not take its key. |
@@ -136,7 +157,7 @@ Read `error.detail` (and `error.details`) and branch on it:
 | `item_not_found` | The component does not exist or this agent cannot see it (outside its scope). Check `list_available_agent_definition_components`. |
 | `unpublished` (409) | Attach or plan found a component your organization has since unpublished. Final: pick another. |
 | `org_component_unpublished` | Your organization unpublished it. Final: it cannot be added or published to again. |
-| `invalid_component` (400) | Publishing checks failed. `error.details.problems` lists each one with a `message` and the `path` or `entry_key`; show them all, fix, and repeat with `dry_run: true`. Unknown rules are still problems. |
+| `invalid_component` (400) | Publishing checks failed. `problems` lists each one with a `message` and the `path` or `entry_key`; show them all, fix, and repeat with `dry_run: true`. Unknown rules are still problems. |
 | `code_reserved` / `code_exists` (409) | The code belongs to PlatformSmith, or your organization already used it (even unpublished). Choose another code. |
 | `stale_base_version` (409) | Someone published, or the agent changed, since you read it. Re-read, show the person again, then repeat. |
 | `scope_ambiguous` / `scope_excludes_source` (400) | Send at most one of `workspace_uuid` / `project_uuid`; to keep tracking, publish where the source agent can see it. |
@@ -145,18 +166,18 @@ Read `error.detail` (and `error.details`) and branch on it:
 
 ## A workflow copy or Library workflow install was refused
 
-Branch on the string code in `error.detail`, never on the numeric `error.code`; lists are in `error.details`.
+Branch on the code, never on `status`; lists a code names are members of the same error.
 
-| `detail` | Meaning and next step |
+| Code | Meaning and next step |
 |---|---|
 | `read_only_copy` (409) | A use-as-is or parent-locked copy: its graph can't be edited or restored. Workflows can't be customised in place. Fork to edit (`fork_workflow_definition`, after asking) — unless `read_only_reason` is `parent_locked`, which only the parent's owner can lift. |
 | `not_published` (409) | The workflow you are copying has no published version. Ask its owner to publish first. |
-| `dependency_missing` (409) | The update needs agents not installed here (`error.details.needs_install`). Install them from the Library, then apply again. |
-| `task_type_unavailable` (422) | The workflow uses a step type that isn't available here (`error.details.task_types`). It can't be installed; do not retry. |
+| `dependency_missing` (409) | The update needs agents not installed here (`needs_install`). Install them from the Library, then apply again. |
+| `task_type_unavailable` (422) | The workflow uses a step type that isn't available here (`tokens` lists them). It can't be installed; do not retry. |
 | `already_installed` (409) | A copy of this Library workflow is already at the target. Use that copy. |
-| `workflow_service_unavailable` (502/503) | The workflow service did not answer. After an install, `error.details.completed: ["dependencies"]` means the agents were kept: plan again and install again. |
+| `workflow_service_unavailable` (503) | The workflow service did not answer. After an install, any agents already installed were kept: plan again and install again. |
 | `kind_mismatch` (400) | `kind` was missing or did not match the item. Send the item's `kind` exactly as the list shows it. |
-| `catalogue_unavailable` (502) | The Library could not be reached for an update. Try again later; the copy keeps working. |
+| `library_catalogue_unavailable` (502) | The Library could not be reached for an update. Try again later; the copy keeps working. |
 | `invalid_mode` (400) | `mode` must be `use_as_is` or `fork`. |
 
 ## A tool returned 403
