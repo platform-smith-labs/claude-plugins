@@ -5,7 +5,7 @@
 A human using the web launcher sees unusable options greyed out. **You have no such affordance, and
 this check is your equivalent of a disabled row.**
 
-Agent definitions may carry **`harness_credentials`**, a map of harness to boolean (for example `{"claude_code": true, "codex_cli": false}`), one entry per harness in the definition's `harnesses`:
+Agent definitions may carry **`harness_credentials`**, a map of harness to boolean (for example `{"claude_code": true, "codex_cli": false, "opencode": false, "grok_build": false, "pi": false, "muse_code": false, "copilot_cli": false}`), one entry per harness in the definition's `harnesses`. Pi runs on an Anthropic or OpenAI API key you connect under Integrations; subscription sign-ins are not supported. Muse Code runs on a Meta API key you connect under Integrations → Meta. Copilot CLI runs on a GitHub fine-grained token you connect under Integrations → GitHub Copilot; the token needs the Copilot Requests permission, and subscription sign-ins are not supported. Contributor models appear only after an organisation admin enables them. The first Muse session in a new sandbox downloads Muse Code (about 400 MB) before it starts:
 
 | Value | Meaning |
 |---|---|
@@ -42,7 +42,7 @@ A harness you pass, or a pin, is **never substituted** — it is refused `422`, 
 | `harness_resume_mismatch` | You are resuming a session that ran a different harness. |
 | `harness_not_in_set` | The harness is not one of the definition's `harnesses`. |
 | `harness_not_in_mandatory_definition` | The organization's mandatory definition does not offer it. |
-| `coding_agent_credential_unresolved` | No usable credential for that harness; the detail names it. |
+| `coding_agent_credential_unresolved` | No usable model-provider credential for that harness; the detail names it. |
 | `harness_not_installed` | The sandbox image does not include that harness. |
 | `harness_not_registered` | Unknown harness id. |
 | `skills_hidden_for_harness` | The chosen harness cannot see a templated skill the run needs; the detail names it. Add a folder link for that harness or pick another. |
@@ -212,13 +212,12 @@ inside its own pod, used by the agent running there:
 | `ps_artifact_list` / `ps_artifact_get` **scope rule** | `scope` names a **tier, not a target**. There is no `project_uuid` or `workspace_uuid` argument: the platform resolves the scope from the runtime the pod is in, so a session cannot read a sibling project's artifacts. |
 | `ps_artifact_get` | Read one artifact's content by `artifact_version_uuid` at the same `scope` you listed it from. Over **1 MiB it is REFUSED, not truncated** — the error names the size, and you never receive a partial body you might mistake for the whole. Unknown, another tenant's, and out-of-scope all return the same not-found. |
 | `ps_work_item_attach_artifact` | Attach an already-saved artifact to a work item (`artifact_uuid`, `role`). |
-| `ps_work_item_get_artifact` | Read back the content of an artifact attached to a work item **in your subtree** — including one an EARLIER session attached. Returns the current version's body. Read-only. Over the in-pod size limit it is refused with the size, not truncated. |
-| `ps_work_item_query` | Read work-item state from inside the pod. |
-| `ps_work_item_create_child` | Decompose the item the session is attributed to. |
-| `ps_work_item_set_state` | Advance the item's execution state. |
-| `ps_work_item_claim_ready` | Claim a ready child from a decomposition. |
-| `ps_work_item_add_dependency` | Add an ordering edge between items. |
+| `ps_work_item_get_artifact` | Read back the content of an artifact attached to **your session's own work item** — including one an EARLIER session attached. Returns the current version's body. Read-only. Over the in-pod size limit it is refused with the size, not truncated. |
+| `ps_work_item_refresh` | Re-read the attributed work item's current status mid-session. Read-only. |
 | `ps_work_item_comment` | Annotate the item's activity rail. |
+| `ps_tracker_get_ticket` / `ps_tracker_get_attachment` | Read the connected tracker ticket (and one attachment) the item was captured from. Read-only. |
+| `ps_tracker_comment_ticket` | Post a comment on that ticket. Only `body`; the target is resolved from the session's work item. |
+| `ps_tracker_set_status` | PROPOSE moving that ticket to another status. Gateway-governed and ask-first by default: a person approves the move before the tracker changes. The target is resolved from the session's work item. |
 | `ps_workflow_signal` | Signal a parked `await-signal` correlation (e.g. a playbook run's completion). |
 | `ps_a2a_send` | Send an A2A message from inside the pod. |
 
@@ -229,12 +228,14 @@ from **outside** a pod it is this server's `get_artifact` (§ the session-artifa
 takes a `session_uuid` you name; the pod's own read is `ps_artifact_get`, which takes no session and
 resolves its scope from the runtime it is running in.
 
-**Every `ps_work_item_*` tool needs session attribution to work at all.** A session has no work
-item to act against unless one was wired in: `session-prompt` accepts an optional
-`work_item_uuid` input (mirroring `launch-playbook`'s field of the same name) — wire it from an
-upstream `work-item-create`/`work-item-create-child` node, or the spawned session's
-`ps_work_item_attach_artifact` (and siblings) will refuse with "this session is not attributed to
-a work item," and no in-pod tool takes the item id as an argument to work around it.
+**Starting work when no ticket exists.** PlatformSmith does not mint work items itself: the tracker owns the ticket and the work item follows it. From outside a pod, `create_tracker_ticket` creates a NEW ticket (`provider` jira | linear | github, a `container_ref` that is already bound to the workspace, a `title`, optional `description`, and `issue_type` for Jira only) and answers 201 `{ref, url, work_item_uuid}`; `work_item_uuid` may be null until the tracker event is captured. The title and description are the customer's own text and are posted to a third-party tracker, so create a ticket only when the person asked for one, never to publish your findings (use `add_tracker_comment` for that). An unbound or paused container answers 409 `tracker_container_not_bound`; there is a limit of 30 creates an hour per workspace (429). To work on the new item, pass its `work_item_uuid` to `launch-playbook` or `session-prompt`, or repair an already-running session with `attribute_session_to_work_item`. To propose a status move from inside the pod use `ps_tracker_set_status`, which a person approves by default.
+
+The orchestrator no longer grants in-pod tools that create, decompose, claim, re-state or link work
+items, so a session cannot reshape the work it runs under; those moves are made in the tracker or the
+UI. The remaining `ps_work_item_*` tools need session attribution to work at all: a session has no
+work item to act against unless one was wired in (`session-prompt` accepts an optional
+`work_item_uuid`, mirroring `launch-playbook`'s field of the same name), and otherwise they refuse with
+"this session is not attributed to a work item." A session can act only on its own work item: where an in-pod tool accepts an item id, any id other than the session's own item returns not-found.
 
 **If a session is already running unattributed, fix it from outside with
 `attribute_session_to_work_item`** — the control-plane tool that records an existing session as an
@@ -242,13 +243,6 @@ attempt on an item. That is the supported repair for the common case where the w
 matter only after it started, and it is idempotent for the same item. It is a *control-plane* call
 (you name the session), so it is not available to the pod itself: the in-pod tools still read
 attribution rather than setting it, which is what keeps a pod unable to reassign its own work.
-
-**Finding a legal state before you set one.** `set_work_item_state` validates against the
-lifecycle that governs the item's type, and an illegal move answers 409 without telling you which
-moves were legal. Read `list_workspace_item_types` for the types a workspace allows (and each
-one's lifecycle), then `list_lifecycle_states` and `list_lifecycle_transitions` for where the item
-can actually go. Do the same before `create_work_item`: its `item_type_name` defaults to
-`"Parent Work"`, and a deployment whose scheme does not define that name refuses the create.
 
 **Prefer the runtime-less `save-artifact` workflow node over an in-pod `ps_artifact_save` call** when
 the only reason for the session is to publish text (e.g. summarizing several upstream nodes'

@@ -4,7 +4,7 @@
      Regenerate: go test ./internal/tools/ -run TestWriteSkillInventory -v (with PS_WRITE_SKILL=1)
      TestGeneratedSkillInventoryIsCurrent fails the build if this file drifts. -->
 
-306 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
+292 tools. **Effect** says whether a call is a read, a write, or destructive — it mirrors the MCP annotation the server sends, so a harness that auto-approves reads is using the same signal.
 
 ⚠️ This inventory is a SNAPSHOT of one build, and it lists every tool ps-mcp CAN serve — not necessarily what the server you are connected to DOES serve. A deployment can hide whole feature areas (work items, workflows, artifacts) behind its feature curtain, and those tools are then absent from `tools/list` and refused if called. That is configuration, not an outage, and not a version mismatch: do not retry and do not report it as a bug. The live `tools/list` always outranks this file, and `get_workflow_task_catalog` outranks any workflow node list written down anywhere. If they disagree, believe the server.
 
@@ -190,7 +190,7 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `get_integration_connection` | read | `connection_uuid` | Get one integration connection's metadata and status (read-only, never a decrypted value) — is it enabled, what auth_type does it carry, which accounts sit under it (each with receives_events, suspended and its workspace assignment), a… |
-| `list_integration_connections` | read | — | List the company's integration connections — every provider (GitHub, Bitbucket, Slack, Jira, Linear, the claude_code / codex_cli credentials a runtime needs, model providers), each with its accounts (receives_events, suspended, workspa… |
+| `list_integration_connections` | read | — | List the company's integration connections — every provider (GitHub, Bitbucket, Slack, Jira, Linear, the model-provider credentials a coding agent needs: Anthropic, OpenAI, Amazon Bedrock, Google Vertex AI, Groq), each with its account… |
 
 ## connectors
 
@@ -297,7 +297,7 @@
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
-| `get_harness_catalog` | read | — | List the coding-agent harnesses this deployment serves, with each one's identifier and the credential auth types it accepts. |
+| `get_harness_catalog` | read | — | List the coding-agent harnesses this deployment serves, with each one's identifier, label, models, autonomy levels and the model providers it consumes (the credentials it can use), plus the provider list itself. |
 
 ## import
 
@@ -321,19 +321,6 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `list_workspace_integrations` | read | `workspace_uuid` | List what a workspace can use: the integration connections AND the accounts assigned to it ({connections, accounts}, read-only). |
-
-## item-lifecycles
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `list_item_lifecycles` | read | — | List the work-item lifecycles this company may use — the shipped system lifecycles plus any the company defined. |
-
-## item-types
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `list_type_scheme_item_types` | read | `type_scheme_uuid` | List one type scheme's item types and its containment grammar — which type may be a child of which. |
-| `list_workspace_item_types` | read | `workspace_uuid` | List the work-item types this workspace may use, which is the authoritative source for create_work_item's item_type_name — that argument defaults to "Parent Work", and a deployment whose scheme does not define that name will refuse the… |
 
 ## items
 
@@ -566,12 +553,6 @@
 |---|---|---|---|
 | `create_workflow_approval` | **destructive** | — | DECIDE a human approval gate — an await-signal(shape=approval) node that has parked and surfaced in the workflow inbox. |
 
-## states
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `list_lifecycle_states` | read | `item_lifecycle_uuid` | List one lifecycle's states, with each state's category and its initial/terminal flags. |
-
 ## task-completions
 
 | Tool | Effect | Required args | Purpose |
@@ -593,6 +574,12 @@
 |---|---|---|---|
 | `terminate_workflow_execution` | **destructive** | `execution_id` | Stop a running workflow execution (issue 0042 finding 0006 — a stuck fork/join previously had no way to be ended short of the platform UI). |
 
+## tickets
+
+| Tool | Effect | Required args | Purpose |
+|---|---|---|---|
+| `create_tracker_ticket` | write | `provider`, `workspace_uuid` | Create a NEW ticket in the organisation's connected issue tracker (provider jira \| linear \| github), in a container (Jira project / Linear team / GitHub repo) that is ALREADY BOUND to this workspace. |
+
 ## tracker-comment
 
 | Tool | Effect | Required args | Purpose |
@@ -606,29 +593,11 @@
 | `get_tracker_attachment` | read | `attachment_id`, `provider`, `ticket_ref`, `workspace_uuid` | Fetch ONE file attached to (or pasted into) a tracker ticket, LIVE and read-only — THIS IS THE CUSTOMER'S OWN TRACKER CONTENT, downloaded through the tracker account the organisation connected. |
 | `get_tracker_ticket` | read | `provider`, `ticket_ref`, `workspace_uuid` | Read a ticket from the organisation's connected issue tracker (provider: linear, github or jira), LIVE and read-only — THIS IS THE CUSTOMER'S OWN TRACKER CONTENT, fetched through the tracker account the organisation connected. |
 
-## transitions
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `list_lifecycle_transitions` | read | `item_lifecycle_uuid` | List one lifecycle's legal moves between states. |
-
-## type-schemes
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `list_type_schemes` | read | — | List the work-item type schemes this company may use — the shipped system schemes plus any the company defined. |
-
 ## unpublish
 
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `unpublish_org_component` | **destructive** | `org_component_uuid` | Unpublish one of your organization's components. |
-
-## validation
-
-| Tool | Effect | Required args | Purpose |
-|---|---|---|---|
-| `get_type_scheme_validation` | read | `type_scheme_uuid` | Report whether a type scheme is usable, and every defect blocking it. |
 
 ## work-item
 
@@ -641,16 +610,8 @@
 | Tool | Effect | Required args | Purpose |
 |---|---|---|---|
 | `add_work_item_comment` | write | `work_item_uuid`, `workspace_uuid` | Add a comment to a work item — the place to record why a decision was made, or what an attempt found, so the next reader is not guessing. |
-| `assign_work_item` | write | `work_item_uuid`, `workspace_uuid` | Set or clear who owns a work item. |
-| `create_child_work_item` | write | `work_item_uuid`, `workspace_uuid` | Decompose a work item — create a child under it. |
-| `create_work_item` | write | `workspace_uuid` | Create a root work item. |
-| `get_work_item` | read | `work_item_uuid`, `workspace_uuid` | One work item in depth: its ancestry, the subtree beneath it, its dependency DAG, every attempt against it, its artifacts and its activity. |
-| `get_work_item_ready` | read | `work_item_uuid`, `workspace_uuid` | Is this work item READY to start — i.e. |
-| `get_workspace_work_item_rollup` | read | `workspace_uuid` | The workspace's work-item roll-up: what is queued, running, blocked, verified or failed across every project, with the attempts behind each. |
-| `remove_work_item_dependency` | **destructive** | `work_item_uuid`, `workspace_uuid` | Remove an ordering dependency. |
-| `set_work_item_rank` | write | `work_item_uuid`, `workspace_uuid` | Set a work item's ordering weight among its siblings. |
-| `set_work_item_state` | write | `work_item_uuid`, `workspace_uuid` | Move a work item to a new lifecycle state. |
-| `update_work_item` | write | `work_item_uuid`, `workspace_uuid` | Edit a work item's title, description or goal. |
+| `get_work_item` | read | `work_item_uuid`, `workspace_uuid` | One work item in depth: its key, title and description, its tracker link and the status its ticket currently has in the tracker, every attempt (session) against it, its artifacts, and its comments and activity. |
+| `get_workspace_work_item_rollup` | read | `workspace_uuid` | The workspace's work-item board: work items grouped by the status each ticket currently has in its tracker (per provider and account), with a count and the items behind each column, across every project. |
 
 ## workflow-definitions
 

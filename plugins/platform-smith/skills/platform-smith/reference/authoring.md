@@ -58,11 +58,13 @@ link. The sandbox gets a relative symlink.
 
 An agent can carry the files of both harnesses, so the definition runs on either with no reinstall. Its `harnesses` lists the ones it supports (non-empty; omit it on create and the platform suggests the set from the files) and `default_harness` (null or a member of `harnesses`) is the one that launches when the caller names none. Adding a harness later still saves; components it cannot read come back as `component_not_read` warnings (one per component and harness); a restored revision saved before harness sets existed is refused (`revision_predates_harness_set`):
 
-| | Claude Code | Codex |
-|---|---|---|
-| Instructions | `CLAUDE.md` | `AGENTS.md` (or a link to `CLAUDE.md`) |
-| Skills | `.claude/skills/<name>/` | `.agents/skills/<name>/` |
-| MCP servers | `.mcp.json` | `~/.codex/config.toml`, `[mcp_servers.<name>]` tables |
+| | Claude Code | Codex | OpenCode | Grok Build | Pi | Muse Code | Copilot CLI |
+|---|---|---|---|---|---|---|---|
+| Instructions | `CLAUDE.md` | `AGENTS.md` (or a link to `CLAUDE.md`) | `AGENTS.md` or `CLAUDE.md` | `AGENTS.md` and `CLAUDE.md` | `AGENTS.md` (or `AGENTS.override.md`); `CLAUDE.md` only when no `AGENTS.md` is in the same directory | `AGENTS.md` and `CLAUDE.md` (when both are in one folder, `AGENTS.md` wins) | `AGENTS.md`, `CLAUDE.md` and `.github/copilot-instructions.md` |
+| Skills | `.claude/skills/<name>/` | `.agents/skills/<name>/` | `.agents/skills/`, `.claude/skills/` or `.opencode/skills/` | `.claude/skills/<name>/` | `.agents/skills` (wired by the platform) | `.agents/skills` or `.claude/skills` | `.github/skills` or `.claude/skills` |
+| MCP servers | `.mcp.json` | `~/.codex/config.toml`, `[mcp_servers.<name>]` tables | the PlatformSmith server only; an agent's own MCP servers are not passed | the PlatformSmith server only; an agent's own MCP servers are not passed | the PlatformSmith server only; an agent's own MCP servers are not passed | the PlatformSmith server only | the PlatformSmith server only |
+
+OpenCode runs with **Full access** or **Plan only** (no approvals) and takes an Anthropic or OpenAI API key, never a subscription. Grok Build runs with **Full access** only and takes an xAI API key (an experimental SuperGrok login works for interactive sessions). Grok Build reads both `AGENTS.md` and `CLAUDE.md` (merge order undocumented by xAI); keep one source of truth. Pi runs with **Full access** only and takes an Anthropic or OpenAI API key. For Pi, put instructions in `AGENTS.md`, because Pi skips `CLAUDE.md` when `AGENTS.md` is present in the same directory. Pi does not read `.claude/` settings or hooks. Muse Code reads `AGENTS.md` and `CLAUDE.md` (when both are in one folder, `AGENTS.md` wins) and skills in `.agents/skills` or `.claude/skills`; it does not read `.claude/` settings or hooks. Muse Code runs with **Full access** only and takes a Meta API key (no subscription). Copilot CLI reads `AGENTS.md`, `CLAUDE.md` and `.github/copilot-instructions.md`; keep one source of truth. Copilot CLI runs with **Full access** only and takes a GitHub fine-grained token (no API key). Hooks and subagents are Claude Code only.
 
 Keep each skill once and put a **folder link** at the other harness's root. A harness sees only the skills
 under its own roots, so **binding a playbook** (or changing a bound agent's `default_harness` or `harnesses`) returns a
@@ -102,7 +104,7 @@ took. Every read carries `version`, `parent`, `parent_revision`, `edited`, `upda
 **Two kinds of parent.** `parent.kind` is `"entity"` — `{uuid, name, scope_type, is_archived}`, the item it
 was copied from — or `"library"` — `{code, name, version, is_archived}`, a **PlatformSmith Library** item. Every
 organization's core playbooks (PlatformSmith Work Item, PlatformSmith Knowledge Base) and default agents
-(Default, Default (Codex), Platform Playbooks, PlatformSmith Knowledge Base) are Library copies. For a Library
+(Default, Default (Codex), Platform Playbooks, PlatformSmith Knowledge Base) are Library copies. Default also admits OpenCode, Grok Build, Pi, Muse Code and Copilot CLI once an admin applies its Library update; there is no separate Default (OpenCode). For a Library
 parent, `version` is the Library version this deployment ships and `parent_revision` the one the copy last
 took; when a deployment ships a newer one the copy shows `update_available` and an organization admin
 reviews and applies it exactly as below. Nothing updates on its own; `detach_*` stops updates; publish and
@@ -183,11 +185,11 @@ Connectors are not Library items; they are connected under Integrations.
    again. The body is `{kind, workspace_uuid?, project_uuid?, harness?, mode?, plan_hash}` (`kind` and `plan_hash`
    required, the rest the SAME as the plan); there is no company argument.
 6. **Act on readiness** — an install goes ahead even when the item is not ready, and the result repeats the
-   readiness. Tell the person each missing piece: a coding-agent credential for the harness, a secret the
+   readiness. Tell the person each missing piece: a model-provider credential the harness can use, a secret the
    agent declares (add it as a secret — never paste a value into a file), or an integration the item needs
    (connect it under Integrations). Readiness is a snapshot: "ready" is not a promise the credential works.
 
-**Harness.** An agent runs under Claude Code or Codex. Pass `harness` to choose; omit it for the item's
+**Harness.** An agent runs under Claude Code, Codex, OpenCode, Grok Build, Pi, Muse Code or Copilot CLI. Pass `harness` to choose; omit it for the item's
 default (a playbook that reuses an agent copy already there keeps that copy's harness). If the item does not
 support the harness you asked for, the refusal (422) names the harnesses it does support — offer one of those.
 The files install either way, so switching later needs no reinstall.
@@ -473,7 +475,7 @@ error's `type`) for every refusal (`reference/troubleshooting.md`).
 `create_playbook` and `update_playbook` author a playbook definition.
 
 `create_playbook` takes `{name, workspace_uuid?, agent_definition_uuid?, description?,
-conductor_instructions?, tracks_work_items?}`. Only `name` is required. **Omit `workspace_uuid`** for an
+conductor_instructions?}`. Only `name` is required. **Omit `workspace_uuid`** for an
 organization-level playbook (it runs in every workspace; creating one needs an organization admin).
 
 **Bind an agent, or it cannot run.** `agent_definition_uuid` is the agent that conducts each run; a

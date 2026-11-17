@@ -160,13 +160,13 @@ ticket as a work item, and no delivery is logged. Use a command.
 `work_item` decides how an automation's events attach to **work items**:
 
 ```json
-"work_item": {"mode": "link", "item_type_name": "Bug"}
+"work_item": {"mode": "link"}
 ```
 
 - `mode: "link"` creates or links **one work item per subject** and attributes the run to it: the
   pull request, the issue, the Slack alert, the schedule fire, or for a webhook the value of
   `key`. `mode: "none"` creates nothing.
-- `item_type_name` picks the type a new item gets — `list_workspace_item_types` lists them.
+- A schedule source cannot use `mode: "link"` with `target_type: "none"` — the platform refuses it (422).
 - `key` — **schedule**: `per_fire` (one item per fire date) or `fixed` (one item for the
   automation); **webhook**: an expression over the event whose value identifies the item, such as
   an incident id, so repeat deliveries about the same thing share one item.
@@ -247,8 +247,8 @@ Suggestions someone dismissed for the workspace are left out (`dismissed_count` 
    `"events": ["pull_request_comment.created"]` and the same `command_verb`. The account and
    container cannot be changed later — create a new automation instead.
    A tracker source may also set `inbound_mode` (`capture`, the default, records the ticket's later
-   comments on the work item; `live` also passes them to a running session), `work_item.item_type_name`
-   for the type a captured ticket becomes, and `report_back` (below).
+   comments on the work item; `live` also passes them to a running session),
+   and `report_back` (below).
 3. Check the response for `warnings`, and for a tracker source check `webhook_registered`: the
    platform registers the provider webhook on create, and without it the ticket's comments never
    arrive. If it is `false`, `webhook_registration_cause` says why (`auth_rejected`, `not_connected`,

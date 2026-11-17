@@ -41,15 +41,38 @@ credential or pick another definition — see the pre-flight in `running-work.md
 
 ## Runtime starts, but the coding agent cannot authenticate
 
-1. **`list_integration_connections`** — does a `claude_code` / `codex_cli` credential exist, and is it
-   enabled? `get_integration_connection` for one in detail.
+1. **`list_integration_connections`** — does a credential exist for a **model provider** the coding
+   agent can use, and is it enabled? Credentials belong to providers (Anthropic, OpenAI, Amazon Bedrock,
+   Google Vertex AI, Groq, xAI, Meta, GitHub Copilot), not to a coding agent; `get_harness_catalog` says which providers each
+   coding agent consumes: Claude Code takes Anthropic (API key or Claude subscription); Codex takes OpenAI
+   (API key or ChatGPT subscription); OpenCode takes an Anthropic or OpenAI **API key** (no subscription); Grok Build takes an xAI API key; Pi takes an Anthropic or OpenAI **API key** (no subscription); Muse Code takes a Meta **API key** (no subscription); Copilot CLI takes a GitHub **fine-grained token** (no API key, no subscription sign-in).
+   `Authentication required` on a Grok session means the xAI key is missing or invalid; replace it under
+   Integrations → xAI.
+   `could not be validated` / `Bad credentials` on a Copilot session means the GitHub token is invalid, expired or lacks Copilot Requests; replace it under
+   Integrations → GitHub Copilot.
+   `401 authentication_error` on a Pi session means the Anthropic key is invalid; replace it under
+   Integrations → Anthropic.
+   `your API key from META_API_KEY was rejected` means the Meta key is invalid; replace it under
+   Integrations → Meta.
+   `Muse Code could not be installed` means the sandbox could not reach `lookaside.facebook.com`, or the download
+   failed its integrity check; retry, then contact support.
+   Bedrock and Vertex appear in the catalog but cannot launch a model yet. A personal key is tried before
+   a shared one. `get_integration_connection` for one in detail.
 2. **`list_workspace_integrations`** — returns the `connections` and `accounts` **assigned to this
    workspace**. A credential that exists company-wide but is not assigned here will not resolve for
    its runtimes.
 3. **`get_agent_definition_secret_refs_status`** — do the refs actually resolve?
-4. ⚠️ **Credentials are frozen into the runtime instance at launch.** A credential fixed (or rotated
-   with `update_secret`) afterwards needs a **fresh runtime** — restarting the existing one changes
-   nothing.
+4. ⚠️ **Each session resolves its own credential when it starts, and a running session keeps what it
+   resolved.** A key fixed or rotated afterwards does not reach a session already running; start a
+   **new session** to pick it up (a session's region or endpoint stays as it was at its start).
+
+## "This runtime holds another person's personal key"
+
+A `409` (generic `conflict`, `reason: credential_scope_conflict`) with the detail *This runtime holds
+another person's personal key. Launch a new runtime to continue.* Correct behaviour, not a fault: a
+runtime that holds one person's personal key refuses attach, turns, shell and agent spawns from anyone
+else. Do not retry; launch a new runtime (it resolves for the caller). A shared company key does not
+cause this.
 
 ## Working tree is empty or not what you expected
 
@@ -137,6 +160,12 @@ A copy that "should have" picked up an organization change has not, unless someo
 
 **`get_workflow_definition_secret_refs_status`** (and `list_workflow_definition_secret_refs`) — the
 workflow twin of the agent-definition check.
+
+For an **`llm`** node, the model credential is not a secret ref. The node (and Forgemate) can run on
+Anthropic, OpenAI or Groq (Bedrock and Vertex not yet), and only on a **company-shared** connection an
+admin switched on with **Also use for Forgemate and workflows**. A personal key, a subscription, or a
+coding-agent-only connection is never used: the node fails with `no_credential_for_provider` until an
+admin opts a connection in.
 
 ## A component would not attach, update or remove
 
